@@ -1,0 +1,59 @@
+name: "🐞 Bug report"
+description: "Report a problem or bug"
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill in the details below.
+
+  - type: input
+    id: summary
+    attributes:
+      label: "Summary"
+      description: "Describe the issue in 1–2 sentences"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to reproduce"
+      description: "What steps lead to the bug?"
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Expected behavior"
+      description: "What should have happened?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: "Actual behavior"
+      description: "What actually happened?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: media
+    attributes:
+      label: "Screenshots or videos"
+      description: "If possible, attach screenshots or a video that demonstrates the issue"
+      placeholder: "Drag & drop files here, or paste image/video links"
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: "Environment"
+      description: "Describe the environment(s) where the issue occurs: App platform, OS, Browser, Device, etc."
+    validations:
+      required: false
