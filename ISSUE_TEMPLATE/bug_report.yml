@@ -1,6 +1,6 @@
 name: "🐞 Bug report"
 description: "Report a problem or bug"
-title: "[BUG] "
+title: "[Bug] "
 labels: ["bug"]
 body:
   - type: markdown
