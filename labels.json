@@ -1,0 +1,312 @@
+[
+  {
+    "name": "APIs",
+    "color": "c500a1",
+    "description": "API design, endpoints, and integrations"
+  },
+  {
+    "name": "Auth",
+    "color": "999742",
+    "description": "Features and fixes related to passphrases, keys, passkeys, biometrics, and secure local storage"
+  },
+  {
+    "name": "Automation",
+    "color": "5a8954",
+    "description": "Automated scripts, GitHub Actions, workflows, or task runners"
+  },
+  {
+    "name": "Blockchain",
+    "color": "ae8528",
+    "description": "Related to blockchain functionality, consensus, and ledger mechanics"
+  },
+  {
+    "name": "bug",
+    "color": "d73a4a",
+    "description": "Something isn't working"
+  },
+  {
+    "name": "Capacitor",
+    "color": "faf9d5",
+    "description": "Mobile builds and integrations via Capacitor"
+  },
+  {
+    "name": "CI/CD",
+    "color": "9766d6",
+    "description": "Actions, tests, and pipelines"
+  },
+  {
+    "name": "Community",
+    "color": "11952e",
+    "description": "Tasks, feedback, or contributions from the community"
+  },
+  {
+    "name": "Composite task",
+    "color": "d93f0b",
+    "description": "Large or complex task that consists of multiple subtask"
+  },
+  {
+    "name": "Cryptocurrency",
+    "color": "ae8df7",
+    "description": "Discussing ADM and other cryptocurrencies"
+  },
+  {
+    "name": "CSS",
+    "color": "226257",
+    "description": "Styling, theming, and layout written in SCSS/CSS"
+  },
+  {
+    "name": "DB",
+    "color": "2bae30",
+    "description": "Work related to databases (PostgreSQL, MongoDB, migrations, queries)"
+  },
+  {
+    "name": "Decentralization",
+    "color": "12a5cf",
+    "description": "Reducing reliance on centralized infrastructure"
+  },
+  {
+    "name": "Desktop",
+    "color": "670ced",
+    "description": "Issues specific to desktop clients"
+  },
+  {
+    "name": "documentation",
+    "color": "0075ca",
+    "description": "Improvements or additions to documentation"
+  },
+  {
+    "name": "duplicate",
+    "color": "cfd3d7",
+    "description": "This issue or pull request already exists"
+  },
+  {
+    "name": "Electron",
+    "color": "61f226",
+    "description": "Desktop application packaging and functionality"
+  },
+  {
+    "name": "Encryption",
+    "color": "6c166f",
+    "description": "End-to-end encryption, cryptographic algorithms, and key management"
+  },
+  {
+    "name": "enhancement",
+    "color": "a2eeef",
+    "description": "New feature or request"
+  },
+  {
+    "name": "good first issue",
+    "color": "7057ff",
+    "description": "Good for newcomers"
+  },
+  {
+    "name": "Governance",
+    "color": "e3d9f0",
+    "description": "AIPs, proposals, and governance-related discussions"
+  },
+  {
+    "name": "Guideline",
+    "color": "0e8a16",
+    "description": "Best practices, coding standards, contribution rules"
+  },
+  {
+    "name": "help wanted",
+    "color": "008672",
+    "description": "Extra attention is needed"
+  },
+  {
+    "name": "High priority",
+    "color": "b60205",
+    "description": "Urgent issues that require immediate attention"
+  },
+  {
+    "name": "Ideas",
+    "color": "1ac1db",
+    "description": "Possible improvements or ideas for long-term roadmap"
+  },
+  {
+    "name": "Infrastructure",
+    "color": "3e5fc3",
+    "description": "Coin and ADAMANT nodes, Servers, VPSs, Ansible, Nginx, Docker, Zabbix, etc."
+  },
+  {
+    "name": "Integration",
+    "color": "a8c41f",
+    "description": "Integration with external blockchains, services, or APIs"
+  },
+  {
+    "name": "invalid",
+    "color": "e4e669",
+    "description": "This doesn't seem right"
+  },
+  {
+    "name": "IPFS",
+    "color": "fe85eb",
+    "description": "File sharing, decentralized storage, and IPFS-specific features"
+  },
+  {
+    "name": "JavaScript",
+    "color": "3d6abb",
+    "description": "Frontend or backend code in JavaScript"
+  },
+  {
+    "name": "Kotlin",
+    "color": "6c1b4c",
+    "description": "Android-specific code and features in Kotlin"
+  },
+  {
+    "name": "Linter",
+    "color": "a073b3",
+    "description": "Code quality checks, ESLint/Stylelint configurations and fixes"
+  },
+  {
+    "name": "Marketing",
+    "color": "012e43",
+    "description": "Topics related to discuss promotion, community growth, campaigns, and public outreach"
+  },
+  {
+    "name": "Marketing offers",
+    "color": "a66648",
+    "description": "Proposals: exchange listings, collaborations, marketing deals, KOL, and promotional activities"
+  },
+  {
+    "name": "Memes",
+    "color": "d27c3d",
+    "description": "Community-driven fun content and memes"
+  },
+  {
+    "name": "Messaging",
+    "color": "fd8530",
+    "description": "Messengers, communication protocols, news, mentions"
+  },
+  {
+    "name": "Mobile",
+    "color": "678bd4",
+    "description": "Issues specific to iOS or Android apps"
+  },
+  {
+    "name": "NodeJS",
+    "color": "dcd0e2",
+    "description": "Backend logic, APIs, and Node.js environment"
+  },
+  {
+    "name": "Nodes",
+    "color": "3aa731",
+    "description": "ADM node software issues, APIs, connectivity, consensus"
+  },
+  {
+    "name": "Performance",
+    "color": "d39bf1",
+    "description": "Optimizations for speed, storage, or network usage"
+  },
+  {
+    "name": "Primary feature",
+    "color": "355714",
+    "description": "Key feature essential for product functionality"
+  },
+  {
+    "name": "Privacy",
+    "color": "23a469",
+    "description": "Protecting user anonymity, metadata, and private communication"
+  },
+  {
+    "name": "Protocol & AIPs",
+    "color": "c364f6",
+    "description": "Changes or discussions around ADM blockchain protocol and node interactions"
+  },
+  {
+    "name": "question",
+    "color": "d876e3",
+    "description": "Further information is requested"
+  },
+  {
+    "name": "Research",
+    "color": "f08871",
+    "description": "Investigation, benchmarking, or analysis"
+  },
+  {
+    "name": "s/ Backlog",
+    "color": "adbef9",
+    "description": "Status: Planned but not scheduled yet"
+  },
+  {
+    "name": "s/ In process",
+    "color": "3b0e82",
+    "description": "Status: Coding and implementation ongoing"
+  },
+  {
+    "name": "s/ In review",
+    "color": "e48d17",
+    "description": "Status: Code under review"
+  },
+  {
+    "name": "s/ Lower priority",
+    "color": "c5def5",
+    "description": "Status: Backlog, Can be addressed later, not urgent"
+  },
+  {
+    "name": "s/ Planned",
+    "color": "fbca04",
+    "description": "Status: Scheduled for implementation"
+  },
+  {
+    "name": "s/ Released",
+    "color": "0e8a16",
+    "description": "Status: Released to production"
+  },
+  {
+    "name": "s/ Someday",
+    "color": "bfd4f2",
+    "description": "Status: Backlog, Might be implemented in the distant future"
+  },
+  {
+    "name": "s/ Test passed",
+    "color": "006B75",
+    "description": "Status: Passed testing, ready for release"
+  },
+  {
+    "name": "s/ Under testing",
+    "color": "0416ab",
+    "description": "Status: Currently being tested"
+  },
+  {
+    "name": "Security",
+    "color": "9011c7",
+    "description": "Topics about security approaches, cryptography, authentication, or vulnerabilities"
+  },
+  {
+    "name": "Swift",
+    "color": "e5a996",
+    "description": "iOS-specific code and features in Swift"
+  },
+  {
+    "name": "Trading",
+    "color": "78e02f",
+    "description": "Topics related to trading bots, markets, price discussions, exchanges, and liquidity"
+  },
+  {
+    "name": "TypeScript",
+    "color": "6081ad",
+    "description": "Code and typing improvements in TypeScript"
+  },
+  {
+    "name": "UX/UI",
+    "color": "c2d159",
+    "description": "User interface and experience improvements"
+  },
+  {
+    "name": "Vue",
+    "color": "66a4dc",
+    "description": "Frontend features or fixes primarily in Vue.js"
+  },
+  {
+    "name": "Web",
+    "color": "cda034",
+    "description": "Issues specific to web client app"
+  },
+  {
+    "name": "wontfix",
+    "color": "ffffff",
+    "description": "This will not be worked on"
+  }
+]
