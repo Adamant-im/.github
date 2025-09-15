@@ -1,5 +1,0 @@
-blank_issues_enabled: false   # disable blank issues without a template
-contact_links:
-  - name: "💬 Community forum"
-    url: "https://github.com/orgs/Adamant-im/discussions"
-    about: "For general questions and ideas, please use Discussions"
