@@ -1,0 +1,37 @@
+name: "✍️ Task: Publication"
+description: "Prepare and publish an article, news post, or announcement"
+title: "[Task] Publication: "
+labels: ["task"]
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: "Summary"
+      description: "Short description of the publication (what and where)"
+      placeholder: "Example: Publish blog post about Secret Wallets in ADAMANT apps"
+    validations:
+      required: true
+
+  - type: textarea
+    id: checklist
+    attributes:
+      label: "Publication checklist"
+      description: "Check all required publishing and announcement steps"
+      value: |
+        - [ ] Prepare publication
+        - [ ] Prepare screenshots/video
+        - [ ] [GitHub Forum](https://github.com/orgs/Adamant-im/discussions)
+        - [ ] [News blog](https://news.adamant.im)
+        - [ ] [Youtube video](https://www.youtube.com/c/ADAMANTMessenger)
+        - [ ] [X post](https://x.com/adamant_im)
+        - [ ] External channel: 
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Notes"
+      description: "Any draft text, links, images, or comments for this publication"
+      validations:
+        required: false
