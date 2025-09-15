@@ -56,5 +56,5 @@ body:
     attributes:
       label: "Notes"
       description: "Any additional information, links, or comments"
-      validations:
-        required: false
+    validations:
+      required: false

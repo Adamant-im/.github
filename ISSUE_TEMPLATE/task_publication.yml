@@ -33,5 +33,5 @@ body:
     attributes:
       label: "Notes"
       description: "Any draft text, links, images, or comments for this publication"
-      validations:
-        required: false
+    validations:
+      required: false
