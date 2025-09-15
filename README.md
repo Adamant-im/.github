@@ -5,11 +5,11 @@
 Default community health files for the `Adamant-im` organization.
 ---
 # Funding
-
-
 Located in `.github/FUNDING.yml`:
 
-This file defines all supported ways to financially support the organization and its projects. It serves as a source of funding links across all repositories in the organization.---
+This file defines all supported ways to financially support the organization and its projects. It serves as a source of funding links across all repositories in the organization.
+
+---
 # Labels Configuration
 
 This repository contains the `labels.json` file, which serves as the **single source of truth for GitHub issue labels** across all repositories in the `Adamant-im` organization.
