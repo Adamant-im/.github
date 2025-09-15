@@ -40,6 +40,11 @@
     "description": "Tasks, feedback, or contributions from the community"
   },
   {
+    "name": "Task",
+    "color": "9aac75",
+    "description": "General task not necessarily related to code"
+  },
+  {
     "name": "Composite task",
     "color": "d93f0b",
     "description": "Large or complex task that consists of multiple subtask"
