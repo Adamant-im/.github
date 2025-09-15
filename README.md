@@ -1,3 +1,15 @@
+# .github
+
+[![Donate](https://img.shields.io/badge/💖_Donate-adamant.im/donate-green)](https://adamant.im/donate/)
+
+Default community health files for the `Adamant-im` organization.
+---
+# Funding
+
+
+Located in `.github/FUNDING.yml`:
+
+This file defines all supported ways to financially support the organization and its projects. It serves as a source of funding links across all repositories in the organization.---
 # Labels Configuration
 
 This repository contains the `labels.json` file, which serves as the **single source of truth for GitHub issue labels** across all repositories in the `Adamant-im` organization.
@@ -25,7 +37,7 @@ This repository contains the `labels.json` file, which serves as the **single so
     "description": "New feature or request"
   }
 ]
-````
+```
 
 ### Fields
 
@@ -55,3 +67,25 @@ Replace `<YOUR_TOKEN>` with a GitHub personal access token with **read/write acc
 
 * Keep `labels.json` up-to-date to maintain consistency across repositories.
 * Only labels defined here will be synchronized; any manual changes in individual repos may be overwritten.
+
+
+---
+# Issue Templates
+
+Located in `.github/ISSUE_TEMPLATE/`:
+
+- **`bug_report.yml`** – Template for reporting bugs, includes steps to reproduce, expected behavior, and environment details.
+- **`feature_request.yml`** – Template for suggesting new features or enhancements.
+- **`task_general.yml`** – Generic task template for issues that don’t fit into other categories.
+- **`task_apprelease.yml`** – Template for tracking app release preparation tasks.
+- **`task_publication.yml`** – Template for tasks related to publishing (e.g., releases, announcements).
+- **`config.yml`** – GitHub configuration file that controls the issue template chooser (defines which templates appear when creating a new issue).
+
+These templates ensure that contributors provide the necessary information when creating issues, which helps maintain clarity and consistency across all repositories.
+
+---
+# Pull Request Template
+
+- **`PULL_REQUEST_TEMPLATE.md`** – A default template shown when opening pull requests.  
+  It guides contributors to describe the purpose of the PR, summarize changes, and link related issues.
+---
