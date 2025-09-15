@@ -1,0 +1,50 @@
+name: "✅ Task: General"
+description: "Create and track a general task"
+title: "[Task] "
+labels: ["task"]
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: "Summary"
+      description: "Short description of the task"
+      placeholder: "Example: Update CoinMarketCap project publication (especially social media links, project description)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: "Details"
+      description: "Add context, requirements, or references"
+    validations:
+      required: false
+
+  - type: textarea
+    id: checklist
+    attributes:
+      label: "Checklist"
+      description: "List subtasks or steps to complete"
+      value: |
+        - [ ] Step 1
+        - [ ] Step 2
+        - [ ] Step 3
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Notes"
+      description: "Any draft text, links, images, or comments"
+    validations:
+      required: false
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: "Verification"
+      description: "How to verify that the task has been completed (tests, review steps, expected outcome)"
+      placeholder: "Example: Ensure that https://coinmarketcap.com/currencies/adamant-messenger/ includes actual project information"
+    validations:
+      required: false

@@ -1,0 +1,60 @@
+name: "🚀 Task: App release"
+description: "Release iOS/PWA app and publish news"
+title: "[Task] Release iOS/PWA v0.0.0 app in App Store/Google Play"
+labels: ["task"]
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: "Summary"
+      description: "Release iOS/PWA v0.0.0 app in App Store/Google Play and publish news"
+    validations:
+      required: true
+
+  - type: textarea
+    id: publications
+    attributes:
+      label: "Publications"
+      description: "Check all required publishing and announcement steps"
+      value: |
+        - [ ] Prepare release notes
+        - [ ] [Merge to `master` branch](https://github.com/Adamant-im)
+        - [ ] [App Release in GitHub Releases](https://github.com/Adamant-im)
+        - [ ] [App Release in App Store](https://apps.apple.com/app/adamant-messenger/id1341473829)
+        - [ ] [App Release in Google Play](https://play.google.com/store/apps/details?id=im.adamant.adamantmessengerpwa&pli=1)
+        - [ ] [Update npmjs publication](https://www.npmjs.com)
+        - [ ] [Update links on Website](https://adamant.im/#adm-apps)
+        - [ ] Prepare news article
+        - [ ] Prepare screenshots/video
+        - [ ] [GitHub Forum](https://github.com/orgs/Adamant-im/discussions)
+        - [ ] [News blog](https://news.adamant.im)
+        - [ ] [Youtube video](https://www.youtube.com/c/ADAMANTMessenger)
+        - [ ] [X post](https://x.com/adamant_im)
+    validations:
+      required: false
+
+  - type: textarea
+    id: actions
+    attributes:
+      label: "Additional actions"
+      description: "Test and verification steps, when applicable"
+      value: |
+        - [ ] Verify that the released app includes all changes
+        - [ ] Verify that the documentation is updated
+        - [ ] Verify that the API schema is updated
+        - [ ] [Verify autobuild: adm.im](https://adm.im)
+        - [ ] [Verify autobuild: GitHub Actions](https://adamant-im.github.io/adamant-im)
+        - [ ] [Verify autobuild: Vercel](https://msg2.adamant.im)
+        - [ ] [Verify autobuild: Massa's DeWeb](https://adm.massahub.network)
+        - [ ] [Verify autobuild: Tor](http://adamant6457join2rxdkr2y7iqatar7n4n72lordxeknj435i4cjhpyd.onion)
+        - [ ] [Verify autobuild: Testnet Surge](https://msg-adamant-testnet.surge.sh)
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Notes"
+      description: "Any additional information, links, or comments"
+    validations:
+      required: false
