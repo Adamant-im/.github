@@ -37,8 +37,8 @@ body:
     attributes:
       label: "Notes"
       description: "Any draft text, links, images, or comments"
-      validations:
-        required: false
+    validations:
+      required: false
 
   - type: textarea
     id: verification
