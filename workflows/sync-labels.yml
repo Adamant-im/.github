@@ -1,0 +1,69 @@
+name: Sync labels
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "labels.json"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install github-label-sync
+        run: npm install -g github-label-sync
+
+      - name: Sync labels to all repos
+        env:
+          LABELS_SYNC_TOKEN: ${{ secrets.LABELS_SYNC_TOKEN }}
+        run: |
+          REPOS=(
+          "Adamant-im/adamant-im"
+          "Adamant-im/.github"
+          "Adamant-im/adamant-tradebot"
+          "Adamant-im/adamant"
+          "Adamant-im/adamant-iOS"
+          "Adamant-im/docs"
+          "Adamant-im/adamant-wallets"
+          "Adamant-im/pool"
+          "Adamant-im/adamant-schema"
+          "Adamant-im/adamant-api-jsclient"
+          "Adamant-im/ipfs-node"
+          "Adamant-im/AIPs"
+          "Adamant-im/adamant-next"
+          "Adamant-im/developers"
+          "Adamant-im/CryptoSwift"
+          "Adamant-im/adamant-ns"
+          "Adamant-im/adamant-console"
+          "Adamant-im/currencyinfo"
+          "Adamant-im/adamant-coinoptimus"
+          "Adamant-im/botfactory-e2e"
+          "Adamant-im/ETH-transactions-storage"
+          "Adamant-im/adamant-airdrop"
+          "Adamant-im/adamant-explorer"
+          "Adamant-im/adamant-exchangebot"
+          "Adamant-im/json-sql"
+          "Adamant-im/adamant-module-logger"
+          "Adamant-im/adamant-botfactory"
+          "Adamant-im/adamant-trader"
+          "Adamant-im/adamant-2fa"
+          "Adamant-im/adamant-bet"
+          "Adamant-im/adamant-bountybot"
+          "Adamant-im/adamant-tradebot-dex"
+          "Adamant-im/adamant-notificationService"
+          "Adamant-im/adamant-mixer"
+          "Adamant-im/adamant-watchbot"
+          )
+          for repo in "${REPOS[@]}"; do
+            echo "Syncing $repo"
+            github-label-sync --access-token $LABELS_SYNC_TOKEN --labels labels.json $repo
+          done
