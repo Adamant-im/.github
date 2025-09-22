@@ -1,13 +1,13 @@
 name: "✨ Feature request"
-description: "Suggest a new idea or feature"
-title: "[Feat] "
+description: "Suggest a new idea, feature or enhancement"
+title: "[Feat, Enhancement] "
 labels: ["enhancement"]
 body:
   - type: input
     id: summary
     attributes:
       label: "Summary"
-      description: "What do you want to add? Describe the feature in 1–2 sentences."
+      description: "What do you want to add or enhance? Describe in 1–2 sentences."
     validations:
       required: true
 
@@ -15,7 +15,7 @@ body:
     id: motivation
     attributes:
       label: "Motivation"
-      description: "Why is this feature valuable?"
+      description: "Why is this feature or enhancement valuable?"
     validations:
       required: true
 
@@ -23,7 +23,7 @@ body:
     id: details
     attributes:
       label: "Detailed description"
-      description: "Provide more context, user stories, or examples of how the feature should work"
+      description: "Provide more context, user stories, or examples of how the feature or enhancement should work"
       placeholder: "As a user, I want to ... so that ..."
     validations:
       required: false
