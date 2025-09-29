@@ -1,0 +1,24 @@
+name-template: "v$NEXT_PATCH_VERSION"
+tag-template: "v$NEXT_PATCH_VERSION"
+
+categories:
+  - title: "✨ Features"
+    labels: ["feature", "enhancement", "feat"]
+  - title: "🐞 Bug fixes"
+    labels: ["bug", "fix"]
+  - title: "🧰 Maintenance"
+    labels: ["chore", "refactor", "docs"]
+  - title: "💥 Breaking changes"
+    labels: ["breaking"]
+
+exclude-labels:
+  - "wip"
+  - "skip-release"
+
+change-template: "- $TITLE (#$PR) by @$AUTHOR"
+template: |
+  ## Changes
+  $CHANGES
+
+  ## Linked issues
+  $ISSUES
