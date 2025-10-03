@@ -43,7 +43,7 @@ async function main() {
             .filter(pr => pr.title.startsWith(prefix))
             .map(pr => {
                 groupedPRs.add(pr.number);
-                return `- ${stripPrefix(pr.title)} (#${pr.number})`;
+                return `- ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`;
             });
         if (items.length) {
             body += `## ${sectionTitle}\n${items.join("\n")}\n\n`;
@@ -52,7 +52,7 @@ async function main() {
 
     const otherPRs = prs
         .filter(pr => !groupedPRs.has(pr.number))
-        .map(pr => `- ${pr.title} (#${pr.number})`);
+        .map(pr => `- ${pr.title} (#${pr.number}) by @${pr.user.login}`);
 
     if (otherPRs.length) {
         body += `## Other PRs\n${otherPRs.join("\n")}\n\n`;
