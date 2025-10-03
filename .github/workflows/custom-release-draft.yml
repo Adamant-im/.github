@@ -1,0 +1,31 @@
+name: Custom Release Draft
+
+on:
+  workflow_call:
+    inputs:
+      target_branch:
+        required: false
+        type: string
+  push:
+    branches:
+      - feat/release-drafter
+
+jobs:
+  release-draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install @octokit/rest
+
+      - name: Run release notes script
+        run: node .github/scripts/release-notes.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
