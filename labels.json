@@ -230,51 +230,6 @@
     "description": "Investigation, benchmarking, or analysis"
   },
   {
-    "name": "s/ Backlog",
-    "color": "adbef9",
-    "description": "Status: Planned but not scheduled yet"
-  },
-  {
-    "name": "s/ In process",
-    "color": "3b0e82",
-    "description": "Status: Coding and implementation ongoing"
-  },
-  {
-    "name": "s/ In review",
-    "color": "e48d17",
-    "description": "Status: Code under review"
-  },
-  {
-    "name": "s/ Lower priority",
-    "color": "c5def5",
-    "description": "Status: Backlog, Can be addressed later, not urgent"
-  },
-  {
-    "name": "s/ Planned",
-    "color": "fbca04",
-    "description": "Status: Scheduled for implementation"
-  },
-  {
-    "name": "s/ Released",
-    "color": "0e8a16",
-    "description": "Status: Released to production"
-  },
-  {
-    "name": "s/ Someday",
-    "color": "bfd4f2",
-    "description": "Status: Backlog, Might be implemented in the distant future"
-  },
-  {
-    "name": "s/ Test passed",
-    "color": "006B75",
-    "description": "Status: Passed testing, ready for release"
-  },
-  {
-    "name": "s/ Under testing",
-    "color": "0416ab",
-    "description": "Status: Currently being tested"
-  },
-  {
     "name": "Security",
     "color": "9011c7",
     "description": "Topics about security approaches, cryptography, authentication, or vulnerabilities"
