@@ -22,7 +22,7 @@ const SECTIONS = {
     "[Docs]": "📚 Documentation",
     "[Test]": "🧪 Tests",
     "[Chore]": "🧹 Chores",
-    Other: "📦 Other PRs",
+    Other: "📦 Other",
 };
 
 const PREFIXES = ["Task", "Composite", "Feat", "Enhancement", "UX/UI", "Bug", "Refactor", "Docs", "Test", "Chore"];
@@ -104,14 +104,14 @@ async function main() {
         if (issue.isStandalone) {
             const pr = issue.prs[0];
             const prLine = section === "Other"
-                ? `${pr.title} (#${pr.number}) by @${pr.user.login}`
-                : `${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`;
+                ? `• ${pr.title} (#${pr.number}) by @${pr.user.login}`
+                : `• ${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`;
             sectionGroups[section].push(prLine);
         } else {
             const prRefs = issue.prs.map(pr => `#${pr.number} by @${pr.user.login}`).join(", ");
             const issueLine = section === "Other"
-                ? `${title} (#${issue.number})\n  ↳ PRs: ${prRefs}`
-                : `${prefix} ${stripPrefix(title)} (#${issue.number})\n  ↳ PRs: ${prRefs}`;
+                ? `• ${title} (#${issue.number})\n  ↳ PRs: ${prRefs}`
+                : `• ${prefix} ${stripPrefix(title)} (#${issue.number})\n  ↳ PRs: ${prRefs}`;
             sectionGroups[section].push(issueLine);
         }
     }
