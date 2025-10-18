@@ -13,19 +13,19 @@ const octokit = new Octokit({ auth: token });
 
 const SECTIONS = {
     "[Task]": "🚀 Tasks",
+    "[Composite]": "🚀 Tasks",
     "[Feat]": "✨ New Features",
     "[Enhancement]": "🔧 Enhancements",
+    "[UX/UI]": "🔧 Enhancements",
     "[Bug]": "🐞 Bug Fixes",
     "[Refactor]": "♻️ Refactoring",
     "[Docs]": "📚 Documentation",
     "[Test]": "🧪 Tests",
     "[Chore]": "🧹 Chores",
-    "[UX/UI]": "🔧 UX/UI Improvements",
-    "[Composite]": "📦 Composite",
-    Other: "📦 Other",
+    Other: "📦 Other PRs",
 };
 
-const PREFIXES = ["Task", "Feat", "Enhancement", "Bug", "Refactor", "Docs", "Test", "Chore", "UX/UI", "Composite"];
+const PREFIXES = ["Task", "Composite", "Feat", "Enhancement", "UX/UI", "Bug", "Refactor", "Docs", "Test", "Chore"];
 
 const PREFIX_ALIASES = {};
 PREFIXES.forEach(p => {
