@@ -11,57 +11,24 @@ if (!token || !repoFull) {
 
 const octokit = new Octokit({ auth: token });
 
-const SECTIONS = [
-    { title: "🚀 Tasks", keys: ["Task", "Composite"], labels: ["task", "composite"] },
-    { title: "✨ New Features", keys: ["Feat", "Feature"], labels: ["feature", "new-feature"] },
-    { title: "🔧 Enhancements", keys: ["Enhancement", "UX/UI"], labels: ["enhancement", "ux/ui"] },
-    { title: "🐞 Bug Fixes", keys: ["Bug", "Fix"], labels: ["bug"] },
-    { title: "♻️ Refactoring", keys: ["Refactor"], labels: ["refactor"] },
-    { title: "📚 Documentation", keys: ["Docs"], labels: ["docs", "documentation"] },
-    { title: "🧪 Tests", keys: ["Test"], labels: ["test"] },
-    { title: "🧹 Chores", keys: ["Chore"], labels: ["chore", "maintenance"] },
-];
+const SECTIONS = {
+    "[Task]": "🚀 Tasks",
+    "[Feat]": "✨ New Features",
+    "[Enhancement]": "🔧 Enhancements",
+    "[Bug]": "🐞 Bug Fixes",
+    "[Refactor]": "♻️ Refactoring",
+    "[Docs]": "📚 Documentation",
+    "[Test]": "🧪 Tests",
+    "[Chore]": "🧹 Chores",
+};
 
-function variantsOf(key) {
-    const k = key.toLowerCase();
-    return [
-        k,
-        `[${k}]`,
-        `${k}:`,
-        `[${k}:]`,
-        `[${k},`,
-        `${k},`,
-    ];
+function stripPrefix(title) {
+    return title.replace(/^\[[^\]]+\]\s*/, "");
 }
 
-function parsePrefixes(title) {
-    const match = title.match(/(\[[^\]]+\]|^[a-z0-9 ,/:-]+)/gi);
-    if (!match) return [];
-    return match
-        .map(p => p.replace(/[\[\]:]/g, "").trim().toLowerCase().split(/[ ,/]+/))
-        .flat()
-        .filter(Boolean);
-}
-
-function findSection(title, labels = [], issueTitle = "", issueLabels = []) {
-    const prefixes = [
-        ...parsePrefixes(title),
-        ...parsePrefixes(issueTitle),
-    ];
-    const allLabels = [...(labels || []), ...(issueLabels || [])].map(l => l.toLowerCase());
-
-    for (const section of SECTIONS) {
-        const allKeys = section.keys.flatMap(variantsOf);
-        if (prefixes.some(p => allKeys.includes(p))) return section;
-        if (allLabels.some(l => section.labels.includes(l))) return section;
-    }
-
-    return null;
-}
-
-function extractLinkedIssues(body) {
-    const matches = [...body.matchAll(/(close[sd]?|fixe?[sd]?|resolve[sd]?)\s+#(\d+)/gi)];
-    return matches.map(m => Number(m[2]));
+function detectPrefix(title) {
+    const match = title.match(/^\[([^\]]+)\]/);
+    return match ? `[${match[1]}]` : null;
 }
 
 async function main() {
@@ -69,61 +36,74 @@ async function main() {
         owner,
         repo,
         state: "closed",
-        per_page: 50,
+        per_page: 100,
         sort: "updated",
         direction: "desc",
     });
 
-    let body = "# 🚀 Release Notes\n\n";
-    const grouped = {};
-    const allSections = SECTIONS.map(s => s.title);
-    allSections.push("Other PRs");
-    allSections.forEach(s => (grouped[s] = []));
+    const { data: issues } = await octokit.issues.listForRepo({
+        owner,
+        repo,
+        state: "closed",
+        per_page: 100,
+    });
 
-    for (const pr of prs) {
-        const linkedIssueNums = extractLinkedIssues(pr.body || "");
-        let linkedIssues = [];
-        for (const num of linkedIssueNums) {
-            try {
-                const { data: issue } = await octokit.issues.get({ owner, repo, issue_number: num });
-                linkedIssues.push(issue);
-            } catch {
-                continue;
-            }
-        }
-
-        const section = findSection(
-            pr.title,
-            pr.labels.map(l => l.name),
-            linkedIssues[0]?.title,
-            linkedIssues[0]?.labels?.map(l => l.name)
-        );
-
-        const issueText = linkedIssues.length
-            ? linkedIssues
-                .map(i => `${i.title} (#${i.number})`)
-                .join(", ")
-            : "";
-
-        const line = `- ${pr.title} (#${pr.number})${issueText ? " closes " + issueText : ""} by @${pr.user.login}`;
-        if (section) grouped[section.title].push(line);
-        else grouped["Other PRs"].push(line);
+    const issueMap = new Map();
+    for (const issue of issues) {
+        issueMap.set(issue.number, { ...issue, prs: [] });
     }
 
-    for (const section of allSections) {
-        const items = grouped[section];
-        if (items.length) {
-            body += `## ${section}\n${items.join("\n")}\n\n`;
+    for (const pr of prs) {
+        if (!pr.merged_at) continue;
+
+        const linkedIssues = (pr.body?.match(/#(\d+)/g) || [])
+            .map((s) => parseInt(s.replace("#", ""), 10))
+            .filter((n) => issueMap.has(n));
+
+        if (linkedIssues.length) {
+            for (const id of linkedIssues) {
+                issueMap.get(id).prs.push(pr);
+            }
+        } else {
+            issueMap.set(`pr-${pr.number}`, { title: pr.title, prs: [pr], isStandalone: true });
         }
+    }
+
+    let body = "# 🚀 Release Notes\n\n";
+
+    const groupedBySection = {};
+
+    for (const issue of issueMap.values()) {
+        const title = issue.title || "";
+        const prefix = detectPrefix(title) || detectPrefix(issue.prs?.[0]?.title || "") || "[Other]";
+        const sectionTitle = SECTIONS[prefix] || "🗂️ Other";
+
+        groupedBySection[sectionTitle] ||= [];
+
+        if (issue.isStandalone) {
+            const pr = issue.prs[0];
+            groupedBySection[sectionTitle].push(
+                `- ${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`
+            );
+        } else {
+            const issueNumber = issue.number;
+            const issueLine = `- ${prefix} ${stripPrefix(title)} (#${issueNumber})`;
+            const prRefs = issue.prs.map((pr) => `#${pr.number}`).join(", ");
+            groupedBySection[sectionTitle].push(`${issueLine}\n  ↳ PRs: ${prRefs}`);
+        }
+    }
+
+    for (const [section, items] of Object.entries(groupedBySection)) {
+        body += `## ${section}\n${items.join("\n")}\n\n`;
     }
 
     const { data: releases } = await octokit.repos.listReleases({ owner, repo });
-    let draft = releases.find(r => r.draft);
+    let draft = releases.find((r) => r.draft);
 
     let nextVersion = "v0.1.0";
-    const latest = releases.find(r => !r.draft) || releases[0];
+    const latest = releases.find((r) => !r.draft) || releases[0];
     if (latest) {
-        const match = latest.tag_name.match(/v(\d+)\.(\d+)\.(\d+)/);
+        const match = latest.tag_name?.match(/v(\d+)\.(\d+)\.(\d+)/);
         if (match) {
             const major = Number(match[1]);
             const minor = Number(match[2]);
@@ -155,9 +135,11 @@ async function main() {
             draft: true,
         });
     }
+
+    console.log("✅ Draft release updated successfully");
 }
 
-main().catch(err => {
+main().catch((err) => {
     console.error(err);
     process.exit(1);
 });
