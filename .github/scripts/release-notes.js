@@ -20,13 +20,14 @@ const SECTIONS = {
     "[Docs]": "📚 Documentation",
     "[Test]": "🧪 Tests",
     "[Chore]": "🧹 Chores",
+    Other: "📦 Other PRs",
 };
 
 function stripPrefix(title) {
     return title.replace(/^\[[^\]]+\]\s*/, "");
 }
 
-function detectPrefix(title) {
+function getPrefix(title) {
     const match = title.match(/^\[([^\]]+)\]/);
     return match ? `[${match[1]}]` : null;
 }
@@ -37,8 +38,6 @@ async function main() {
         repo,
         state: "closed",
         per_page: 100,
-        sort: "updated",
-        direction: "desc",
     });
 
     const { data: issues } = await octokit.issues.listForRepo({
@@ -57,8 +56,8 @@ async function main() {
         if (!pr.merged_at) continue;
 
         const linkedIssues = (pr.body?.match(/#(\d+)/g) || [])
-            .map((s) => parseInt(s.replace("#", ""), 10))
-            .filter((n) => issueMap.has(n));
+            .map(s => parseInt(s.replace("#", ""), 10))
+            .filter(n => issueMap.has(n));
 
         if (linkedIssues.length) {
             for (const id of linkedIssues) {
@@ -70,50 +69,48 @@ async function main() {
     }
 
     let body = "# 🚀 Release Notes\n\n";
-
-    const groupedBySection = {};
+    const sectionGroups = {};
+    for (const key of Object.keys(SECTIONS)) sectionGroups[key] = [];
 
     for (const issue of issueMap.values()) {
-        const title = issue.title || "";
-        const prefix = detectPrefix(title) || detectPrefix(issue.prs?.[0]?.title || "") || "[Other]";
-        const sectionTitle = SECTIONS[prefix] || "🗂️ Other";
+        if (!issue.prs.length && !issue.isStandalone) continue; // пропускаем issue без PR
 
-        groupedBySection[sectionTitle] ||= [];
+        const title = issue.title || "";
+        const prefix = getPrefix(title) || getPrefix(issue.prs?.[0]?.title || "") || "Other";
+        const section = SECTIONS[prefix] ? prefix : "Other";
 
         if (issue.isStandalone) {
             const pr = issue.prs[0];
-            groupedBySection[sectionTitle].push(
-                `- ${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`
+            sectionGroups[section].push(
+                `${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`
             );
         } else {
-            const issueNumber = issue.number;
-            const issueLine = `- ${prefix} ${stripPrefix(title)} (#${issueNumber})`;
-            const prRefs = issue.prs.map((pr) => `#${pr.number}`).join(", ");
-            groupedBySection[sectionTitle].push(`${issueLine}\n  ↳ PRs: ${prRefs}`);
+            const prRefs = issue.prs.map(pr => `#${pr.number} by @${pr.user.login}`).join(", ");
+            sectionGroups[section].push(`${prefix} ${stripPrefix(title)} (#${issue.number})\n  ↳ PRs: ${prRefs}`);
         }
     }
 
-    for (const [section, items] of Object.entries(groupedBySection)) {
-        body += `## ${section}\n${items.join("\n")}\n\n`;
+    const orderedSections = ["[Task]", ...Object.keys(SECTIONS).filter(k => k !== "[Task]" && k !== "Other"), "Other"];
+
+    for (const key of orderedSections) {
+        const items = sectionGroups[key];
+        if (items?.length) {
+            body += `## ${SECTIONS[key]}\n${items.join("\n")}\n\n`;
+        }
     }
 
     const { data: releases } = await octokit.repos.listReleases({ owner, repo });
-    let draft = releases.find((r) => r.draft);
+    let draft = releases.find(r => r.draft);
 
     let nextVersion = "v0.1.0";
-    const latest = releases.find((r) => !r.draft) || releases[0];
+    const latest = releases.find(r => !r.draft) || releases[0];
     if (latest) {
-        const match = latest.tag_name?.match(/v(\d+)\.(\d+)\.(\d+)/);
+        const match = latest.tag_name.match(/v(\d+)\.(\d+)\.(\d+)/);
         if (match) {
-            const major = Number(match[1]);
-            const minor = Number(match[2]);
-            const patch = Number(match[3]) + 1;
-            nextVersion = `v${major}.${minor}.${patch}`;
+            const [_, major, minor, patch] = match.map(Number);
+            nextVersion = `v${major}.${minor}.${patch + 1}`;
         }
     }
-
-    const releaseName = nextVersion;
-    const releaseTag = nextVersion;
 
     if (draft) {
         console.log("Updating existing draft release:", draft.tag_name);
@@ -121,7 +118,7 @@ async function main() {
             owner,
             repo,
             release_id: draft.id,
-            name: releaseName,
+            name: nextVersion,
             body,
         });
     } else {
@@ -129,8 +126,8 @@ async function main() {
         await octokit.repos.createRelease({
             owner,
             repo,
-            tag_name: releaseTag,
-            name: releaseName,
+            tag_name: nextVersion,
+            name: nextVersion,
             body,
             draft: true,
         });
@@ -139,7 +136,7 @@ async function main() {
     console.log("✅ Draft release updated successfully");
 }
 
-main().catch((err) => {
+main().catch(err => {
     console.error(err);
     process.exit(1);
 });
