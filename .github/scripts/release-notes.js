@@ -20,16 +20,42 @@ const SECTIONS = {
     "[Docs]": "📚 Documentation",
     "[Test]": "🧪 Tests",
     "[Chore]": "🧹 Chores",
+    "[UX/UI]": "🔧 UX/UI Improvements",
+    "[Composite]": "📦 Composite",
     Other: "📦 Other",
 };
 
+const PREFIXES = ["Task", "Feat", "Enhancement", "Bug", "Refactor", "Docs", "Test", "Chore", "UX/UI", "Composite"];
+
+const PREFIX_ALIASES = {};
+PREFIXES.forEach(p => {
+    const norm = `[${p}]`;
+    const lower = p.toLowerCase();
+
+    PREFIX_ALIASES[`[${lower}]`] = norm;
+    PREFIX_ALIASES[lower] = norm;
+    PREFIX_ALIASES[`${lower}:`] = norm;
+    PREFIX_ALIASES[p] = norm;
+    PREFIX_ALIASES[`${p}:`] = norm;
+});
+
 function stripPrefix(title) {
-    return title.replace(/^\[[^\]]+\]\s*/, "");
+    return title.replace(/^\[[^\]]+\]\s*/, "").replace(/^[a-z]+:\s*/i, "").trim();
 }
 
 function getPrefix(title) {
-    const match = title.match(/^\[([^\]]+)\]/);
-    return match ? `[${match[1]}]` : null;
+    if (!title) return null;
+    const matchBracket = title.match(/^\[([^\]]+)\]/);
+    if (matchBracket) {
+        const norm = PREFIX_ALIASES[`[${matchBracket[1].toLowerCase()}]`];
+        if (norm) return norm;
+    }
+    const matchWord = title.match(/^([a-z/]+):?/i);
+    if (matchWord) {
+        const norm = PREFIX_ALIASES[matchWord[1].toLowerCase()];
+        if (norm) return norm;
+    }
+    return null;
 }
 
 async function main() {
@@ -48,9 +74,7 @@ async function main() {
     });
 
     const issueMap = new Map();
-    for (const issue of issues) {
-        issueMap.set(issue.number, { ...issue, prs: [] });
-    }
+    for (const issue of issues) issueMap.set(issue.number, { ...issue, prs: [] });
 
     for (const pr of prs) {
         if (!pr.merged_at) continue;
@@ -60,9 +84,7 @@ async function main() {
             .filter(n => issueMap.has(n));
 
         if (linkedIssues.length) {
-            for (const id of linkedIssues) {
-                issueMap.get(id).prs.push(pr);
-            }
+            for (const id of linkedIssues) issueMap.get(id).prs.push(pr);
         } else {
             issueMap.set(`pr-${pr.number}`, { title: pr.title, prs: [pr], isStandalone: true });
         }
@@ -73,7 +95,7 @@ async function main() {
     for (const key of Object.keys(SECTIONS)) sectionGroups[key] = [];
 
     for (const issue of issueMap.values()) {
-        if (!issue.prs.length && !issue.isStandalone) continue; // пропускаем issue без PR
+        if (!issue.prs.length && !issue.isStandalone) continue;
 
         const title = issue.title || "";
         const prefix = getPrefix(title) || getPrefix(issue.prs?.[0]?.title || "") || "Other";
