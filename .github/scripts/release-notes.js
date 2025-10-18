@@ -81,12 +81,16 @@ async function main() {
 
         if (issue.isStandalone) {
             const pr = issue.prs[0];
-            sectionGroups[section].push(
-                `${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`
-            );
+            const prLine = section === "Other"
+                ? `${pr.title} (#${pr.number}) by @${pr.user.login}`
+                : `${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`;
+            sectionGroups[section].push(prLine);
         } else {
             const prRefs = issue.prs.map(pr => `#${pr.number} by @${pr.user.login}`).join(", ");
-            sectionGroups[section].push(`${prefix} ${stripPrefix(title)} (#${issue.number})\n  ↳ PRs: ${prRefs}`);
+            const issueLine = section === "Other"
+                ? `${title} (#${issue.number})\n  ↳ PRs: ${prRefs}`
+                : `${prefix} ${stripPrefix(title)} (#${issue.number})\n  ↳ PRs: ${prRefs}`;
+            sectionGroups[section].push(issueLine);
         }
     }
 
