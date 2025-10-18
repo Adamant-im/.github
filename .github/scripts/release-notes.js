@@ -20,7 +20,7 @@ const SECTIONS = {
     "[Docs]": "📚 Documentation",
     "[Test]": "🧪 Tests",
     "[Chore]": "🧹 Chores",
-    Other: "📦 Other PRs",
+    Other: "📦 Other",
 };
 
 function stripPrefix(title) {
