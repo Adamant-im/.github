@@ -2,9 +2,10 @@ name: Custom Release Draft
 
 on:
   workflow_call:
-    secrets:
-      GITHUB_TOKEN:
-        required: true
+    inputs:
+      target_branch:
+        required: false
+        type: string
   push:
     branches:
       - master
