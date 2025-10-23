@@ -35,27 +35,18 @@ const PREFIX_ALIASES = {};
 PREFIXES.forEach(p => {
     const norm = `[${p}]`;
     const lower = p.toLowerCase();
-
-    // Bracket variants
     PREFIX_ALIASES[`[${lower}]`] = norm;
     PREFIX_ALIASES[`[${p}]`] = norm;
-
-    // Plain word variants
     PREFIX_ALIASES[lower] = norm;
     PREFIX_ALIASES[p] = norm;
-
-    // Colon variants
     PREFIX_ALIASES[`${lower}:`] = norm;
     PREFIX_ALIASES[`${p}:`] = norm;
 });
 
-
-// Strip prefix from title
 function stripPrefix(title) {
     return title.replace(/^\[[^\]]+\]\s*/, "").replace(/^[a-z/]+:\s*/i, "").trim();
 }
 
-// Extract normalized prefix from title
 function getPrefix(title) {
     if (!title) return null;
     const matchBracket = title.match(/^\[([^\]]+)\]/);
@@ -75,19 +66,19 @@ async function main() {
     // 1. Get latest release (tag) on master
     const { data: releases } = await octokit.repos.listReleases({ owner, repo });
     const latestRelease = releases.find(r => !r.draft);
-    const latestTag = latestRelease?.tag_name;
+    const latestTag = latestRelease?.tag_name || "master";
 
     // 2. Compare dev vs last release tag to get all commits after last release
     const { data: compare } = await octokit.repos.compareCommits({
         owner,
         repo,
-        base: latestTag || "master",
+        base: latestTag,
         head: "dev",
     });
 
     const devShas = compare.commits.map(c => c.sha);
 
-    // 3. Find PRs associated with these commits
+    // 3. Collect all merged PRs in dev after last release
     const pendingPRs = [];
     for (const sha of devShas) {
         const { data: prs } = await octokit.repos.listPullRequestsAssociatedWithCommit({
@@ -107,33 +98,63 @@ async function main() {
         return;
     }
 
-    // 4. Group PRs by section
-    const sectionGroups = {};
-    Object.keys(SECTIONS).forEach(k => sectionGroups[k] = []);
+    // 4. Map issues -> PRs
+    const issueMap = new Map(); // key: issue number, value: { issue, prs[] }
+    const standalonePRs = [];
 
     for (const pr of pendingPRs) {
-        const prefix = getPrefix(pr.title) || "Other";
-        const section = SECTIONS[prefix] ? prefix : "Other";
+        // Get linked issues via GitHub API
+        const { data: linkedIssues } = await octokit.pulls.listIssuesAssociatedWithPullRequest({
+            owner,
+            repo,
+            pull_number: pr.number,
+        });
 
-        const prLine = section === "Other"
-            ? `• ${pr.title} (#${pr.number}) by @${pr.user.login}`
-            : `• ${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`;
-
-        sectionGroups[section].push(prLine);
-    }
-
-    // 5. Order sections: Tasks first, Other last
-    const orderedSections = ["[Task]", ...Object.keys(SECTIONS).filter(k => k !== "[Task]" && k !== "Other"), "Other"];
-
-    let body = "# 🚀 Release Notes\n\n";
-    for (const key of orderedSections) {
-        const items = sectionGroups[key];
-        if (items?.length) {
-            body += `## ${SECTIONS[key]}\n${items.join("\n")}\n\n`;
+        if (linkedIssues.length) {
+            linkedIssues.forEach(issue => {
+                if (!issueMap.has(issue.number)) issueMap.set(issue.number, { issue, prs: [] });
+                issueMap.get(issue.number).prs.push(pr);
+            });
+        } else {
+            standalonePRs.push(pr);
         }
     }
 
-    // 6. Determine next patch version
+    // 5. Group by section
+    const sectionGroups = {};
+    Object.keys(SECTIONS).forEach(k => sectionGroups[k] = []);
+
+    // 5a. Issues with PRs
+    for (const { issue, prs } of issueMap.values()) {
+        const prefix = getPrefix(issue.title) || getPrefix(prs[0].title) || "Other";
+        const section = SECTIONS[prefix] ? prefix : "Other";
+
+        const prRefs = prs.map(pr => `#${pr.number} by @${pr.user.login}`).join(", ");
+        const line = `• ${prefix} ${stripPrefix(issue.title)} (#${issue.number})\n  ↳ PRs: ${prRefs}`;
+        sectionGroups[section].push(line);
+    }
+
+    // 5b. Standalone PRs
+    for (const pr of standalonePRs) {
+        const prefix = getPrefix(pr.title) || "Other";
+        const section = SECTIONS[prefix] ? prefix : "Other";
+
+        const line = section === "Other"
+            ? `• ${pr.title} (#${pr.number}) by @${pr.user.login}`
+            : `• ${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`;
+
+        sectionGroups[section].push(line);
+    }
+
+    // 6. Assemble release notes
+    const orderedSections = ["[Task]", ...Object.keys(SECTIONS).filter(k => k !== "[Task]" && k !== "Other"), "Other"];
+    let body = "# 🚀 Release Notes\n\n";
+    for (const key of orderedSections) {
+        const items = sectionGroups[key];
+        if (items?.length) body += `## ${SECTIONS[key]}\n${items.join("\n")}\n\n`;
+    }
+
+    // 7. Determine next patch version
     let nextVersion = "v0.1.0";
     const latestNonDraft = releases.find(r => !r.draft) || releases[0];
     if (latestNonDraft) {
@@ -144,7 +165,7 @@ async function main() {
         }
     }
 
-    // 7. Create or update draft release
+    // 8. Create or update draft release
     const draft = releases.find(r => r.draft);
     if (draft) {
         console.log("Updating existing draft release:", draft.tag_name);
