@@ -35,12 +35,20 @@ const PREFIX_ALIASES = {};
 PREFIXES.forEach(p => {
     const norm = `[${p}]`;
     const lower = p.toLowerCase();
+
+    // Bracket variants
     PREFIX_ALIASES[`[${lower}]`] = norm;
+    PREFIX_ALIASES[`[${p}]`] = norm;
+
+    // Plain word variants
     PREFIX_ALIASES[lower] = norm;
-    PREFIX_ALIASES[`${lower}:`] = norm;
     PREFIX_ALIASES[p] = norm;
+
+    // Colon variants
+    PREFIX_ALIASES[`${lower}:`] = norm;
     PREFIX_ALIASES[`${p}:`] = norm;
 });
+
 
 // Strip prefix from title
 function stripPrefix(title) {
