@@ -26,55 +26,41 @@ const SECTIONS = {
     Other: "📦 Other",
 };
 
-const PREFIXES = [
-    "Task", "Composite", "Feat", "Enhancement", "UX/UI",
-    "Bug", "Refactor", "Docs", "Test", "Chore", "Fix"
-];
+const PREFIXES = Object.keys(SECTIONS).filter(p => p !== "Other");
 
+// Build prefix aliases (lowercase, colon, brackets)
 const PREFIX_ALIASES = {};
 PREFIXES.forEach(p => {
-    const norm = `[${p}]`;
-    const lower = p.toLowerCase();
-
-    PREFIX_ALIASES[lower] = norm;
-    PREFIX_ALIASES[p] = norm;
-    PREFIX_ALIASES[`${lower}:`] = norm;
-    PREFIX_ALIASES[`${p}:`] = norm;
-    PREFIX_ALIASES[`[${lower}]`] = norm;
-    PREFIX_ALIASES[`[${p}]`] = norm;
+    const clean = p.replace(/[\[\]]/g, "");
+    PREFIX_ALIASES[clean.toLowerCase()] = p;
+    PREFIX_ALIASES[`${clean.toLowerCase()}:`] = p;
+    PREFIX_ALIASES[clean] = p;
+    PREFIX_ALIASES[`${clean}:`] = p;
 });
 
 // Strip prefix from title
 function stripPrefix(title) {
-    return title.replace(/^\[[^\]]+\]\s*/, "").replace(/^[a-z/]+:\s*/i, "").trim();
+    return title.replace(/^\[[^\]]+\]\s*/, "").replace(/^[a-z🎨\/]+:\s*/i, "").trim();
 }
 
 // Extract normalized prefix from title
 function getPrefix(title) {
     if (!title) return null;
-    const cleanTitle = title.trim();
-    const match = cleanTitle.match(/^(\[[^\]]+\]|[a-z\/]+):?/i);
+    const match = title.match(/^(\[[^\]]+\]|[a-z🎨\/]+):?/i);
     if (match) {
         const candidate = match[1].replace(/[\[\]]/g, "").toLowerCase();
-        return PREFIX_ALIASES[candidate] || PREFIX_ALIASES[match[1]] || null;
+        return PREFIX_ALIASES[candidate] || "Other";
     }
-    return null;
-}
-
-
-// Extract issue numbers from PR body
-function extractIssueNumbers(prBody) {
-    if (!prBody) return [];
-    return Array.from(prBody.matchAll(/#(\d+)/g), m => parseInt(m[1], 10));
+    return "Other";
 }
 
 async function main() {
-    // 1. Get latest release (tag) on master
+    // 1. Get latest release on master
     const { data: releases } = await octokit.repos.listReleases({ owner, repo });
     const latestRelease = releases.find(r => !r.draft);
     const latestTag = latestRelease?.tag_name || "master";
 
-    // 2. Compare dev vs last release tag to get all commits after last release
+    // 2. Compare dev vs latest release to get commits
     const { data: compare } = await octokit.repos.compareCommits({
         owner,
         repo,
@@ -84,7 +70,7 @@ async function main() {
 
     const devShas = compare.commits.map(c => c.sha);
 
-    // 3. Find PRs associated with these commits
+    // 3. Find all merged PRs in dev not in master
     const pendingPRs = [];
     for (const sha of devShas) {
         const { data: prs } = await octokit.repos.listPullRequestsAssociatedWithCommit({
@@ -104,56 +90,58 @@ async function main() {
         return;
     }
 
-    // 4. Map issues to PRs
-    const issueMap = new Map();
-    const standalonePRs = [];
+    // 4. Map issues → PRs
+    const issueMap = new Map(); // issueNumber -> { issue, prs[] }
 
     for (const pr of pendingPRs) {
-        const issueNumbers = extractIssueNumbers(pr.body);
-        if (issueNumbers.length) {
-            for (const num of issueNumbers) {
-                const { data: issue } = await octokit.issues.get({ owner, repo, issue_number: num });
-                if (!issueMap.has(issue.number)) issueMap.set(issue.number, { issue, prs: [] });
+        // Fetch issues linked to this PR
+        const { data: linkedIssues } = await octokit.pulls.listIssuesAssociatedWithPullRequest({
+            owner,
+            repo,
+            pull_number: pr.number,
+        });
+
+        if (linkedIssues.length) {
+            linkedIssues.forEach(issue => {
+                if (!issueMap.has(issue.number)) {
+                    issueMap.set(issue.number, { issue, prs: [] });
+                }
                 issueMap.get(issue.number).prs.push(pr);
-            }
+            });
         } else {
-            standalonePRs.push(pr);
+            // PR without linked issue → special case
+            issueMap.set(`pr-${pr.number}`, { prs: [pr], isStandalone: true });
         }
     }
 
-    // 5. Group by sections
+    // 5. Group PRs/issues by section
     const sectionGroups = {};
     Object.keys(SECTIONS).forEach(k => sectionGroups[k] = []);
 
-    for (const [issueNum, obj] of issueMap.entries()) {
-        const issue = obj.issue;
-        const prs = obj.prs;
-        const prefix = getPrefix(issue.title) || getPrefix(prs[0]?.title) || "Other";
-        const section = SECTIONS[prefix] ? prefix : "Other";
-        const prAuthors = prs.map(p => `@${p.user.login}`).join(", ");
-        const prRefs = prs.map(p => `#${p.number}`).join(", ");
+    for (const [key, entry] of issueMap.entries()) {
+        if (entry.isStandalone) {
+            const pr = entry.prs[0];
+            const prefix = getPrefix(pr.title);
+            const section = SECTIONS[prefix] ? prefix : "Other";
+            sectionGroups[section].push(`• ${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`);
+        } else {
+            const issue = entry.issue;
+            const prefix = getPrefix(issue.title) || getPrefix(entry.prs[0]?.title) || "Other";
+            const section = SECTIONS[prefix] ? prefix : "Other";
 
-        const line = prs.length > 0
-            ? `• ${prefix} ${stripPrefix(issue.title)} (#${issue.number})\n  ↳ PRs: ${prRefs} by ${prAuthors}`
-            : `• ${prefix} ${stripPrefix(issue.title)} (#${issue.number})`;
+            const prRefs = entry.prs.map(pr => `#${pr.number} by @${pr.user.login}`).join(", ");
+            const issueLine = entry.prs.length > 0
+                ? `• ${prefix} ${stripPrefix(issue.title)} (#${issue.number})\n  ↳ PRs: ${prRefs}`
+                : `• ${prefix} ${stripPrefix(issue.title)} (#${issue.number})`;
 
-        sectionGroups[section].push(line);
+            sectionGroups[section].push(issueLine);
+        }
     }
 
-    // Special case: PRs without issues
-    for (const pr of standalonePRs) {
-        const prefix = getPrefix(pr.title) || "Other";
-        const section = SECTIONS[prefix] ? prefix : "Other";
-        const line = section === "Other"
-            ? `• ${pr.title} (#${pr.number}) by @${pr.user.login}`
-            : `• ${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`;
-        sectionGroups[section].push(line);
-    }
-
-    // 6. Order sections: Tasks first, Other last
+    // 6. Build release notes
     const orderedSections = ["[Task]", ...Object.keys(SECTIONS).filter(k => k !== "[Task]" && k !== "Other"), "Other"];
-
     let body = "# 🚀 Release Notes\n\n";
+
     for (const key of orderedSections) {
         const items = sectionGroups[key];
         if (items?.length) {
