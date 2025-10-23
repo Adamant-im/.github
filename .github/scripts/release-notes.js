@@ -25,7 +25,11 @@ const SECTIONS = {
     Other: "📦 Other",
 };
 
-const PREFIXES = ["Task","Composite","Feat","Enhancement","UX/UI","Bug","Refactor","Docs","Test","Chore","Fix"];
+const PREFIXES = [
+    "Task", "Composite", "Feat", "Enhancement", "UX/UI",
+    "Bug", "Refactor", "Docs", "Test", "Chore", "Fix"
+];
+
 const PREFIX_ALIASES = {};
 PREFIXES.forEach(p => {
     const norm = `[${p}]`;
@@ -43,46 +47,75 @@ function stripPrefix(title) {
 
 function getPrefix(title) {
     if (!title) return null;
-
     const matchBracket = title.match(/^\[([^\]]+)\]/);
     if (matchBracket) {
         const norm = PREFIX_ALIASES[`[${matchBracket[1].toLowerCase()}]`];
         if (norm) return norm;
     }
-
     const matchWord = title.match(/^([a-z/]+):/i);
     if (matchWord) {
         const norm = PREFIX_ALIASES[matchWord[1].toLowerCase()];
         if (norm) return norm;
     }
-
     return null;
 }
 
 async function main() {
-    const { data: prs } = await octokit.pulls.list({
+    const { data: masterCommits } = await octokit.repos.listCommits({
         owner,
         repo,
-        state: "open",
-        base: "master",
-        head: "dev",
+        sha: "master",
+        per_page: 100,
+    });
+    const masterShaSet = new Set(masterCommits.map(c => c.sha));
+
+    const { data: devPRs } = await octokit.pulls.list({
+        owner,
+        repo,
+        state: "closed",
+        base: "dev",
         per_page: 100,
     });
 
-    if (!prs.length) {
-        console.log("No open PRs from dev to master found.");
+    const pendingPRs = [];
+    for (const pr of devPRs) {
+        const { data: prCommits } = await octokit.pulls.listCommits({
+            owner,
+            repo,
+            pull_number: pr.number,
+        });
+        if (prCommits.some(c => !masterShaSet.has(c.sha))) {
+            pendingPRs.push(pr);
+        }
+    }
+
+    if (!pendingPRs.length) {
+        console.log("No PRs in dev that are not yet in master.");
         return;
     }
 
-    let body = "# 🚀 Release Notes\n\n";
-    for (const pr of prs) {
+    let sectionGroups = {};
+    Object.keys(SECTIONS).forEach(k => sectionGroups[k] = []);
+
+    for (const pr of pendingPRs) {
         const prefix = getPrefix(pr.title) || "Other";
         const section = SECTIONS[prefix] ? prefix : "Other";
+
         const prLine = section === "Other"
             ? `• ${pr.title} (#${pr.number}) by @${pr.user.login}`
             : `• ${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`;
 
-        body += `## ${SECTIONS[section]}\n${prLine}\n\n`;
+        sectionGroups[section].push(prLine);
+    }
+
+    const orderedSections = ["[Task]", ...Object.keys(SECTIONS).filter(k => k !== "[Task]" && k !== "Other"), "Other"];
+
+    let body = "# 🚀 Release Notes\n\n";
+    for (const key of orderedSections) {
+        const items = sectionGroups[key];
+        if (items?.length) {
+            body += `## ${SECTIONS[key]}\n${items.join("\n")}\n\n`;
+        }
     }
 
     const { data: releases } = await octokit.repos.listReleases({ owner, repo });
