@@ -35,18 +35,26 @@ const PREFIX_ALIASES = {};
 PREFIXES.forEach(p => {
     const norm = `[${p}]`;
     const lower = p.toLowerCase();
+
+    // Bracket variants
     PREFIX_ALIASES[`[${lower}]`] = norm;
     PREFIX_ALIASES[`[${p}]`] = norm;
+
+    // Plain word variants
     PREFIX_ALIASES[lower] = norm;
     PREFIX_ALIASES[p] = norm;
+
+    // Colon variants
     PREFIX_ALIASES[`${lower}:`] = norm;
     PREFIX_ALIASES[`${p}:`] = norm;
 });
 
+// Strip prefix from title
 function stripPrefix(title) {
     return title.replace(/^\[[^\]]+\]\s*/, "").replace(/^[a-z/]+:\s*/i, "").trim();
 }
 
+// Extract normalized prefix from title
 function getPrefix(title) {
     if (!title) return null;
     const matchBracket = title.match(/^\[([^\]]+)\]/);
@@ -60,6 +68,12 @@ function getPrefix(title) {
         if (norm) return norm;
     }
     return null;
+}
+
+// Extract issue numbers from PR body
+function extractIssueNumbers(prBody) {
+    if (!prBody) return [];
+    return Array.from(prBody.matchAll(/#(\d+)/g), m => parseInt(m[1], 10));
 }
 
 async function main() {
@@ -78,7 +92,7 @@ async function main() {
 
     const devShas = compare.commits.map(c => c.sha);
 
-    // 3. Collect all merged PRs in dev after last release
+    // 3. Find PRs associated with these commits
     const pendingPRs = [];
     for (const sha of devShas) {
         const { data: prs } = await octokit.repos.listPullRequestsAssociatedWithCommit({
@@ -98,60 +112,61 @@ async function main() {
         return;
     }
 
-    // 4. Map issues -> PRs
-    const issueMap = new Map(); // key: issue number, value: { issue, prs[] }
+    // 4. Map issues to PRs
+    const issueMap = new Map();
     const standalonePRs = [];
 
     for (const pr of pendingPRs) {
-        // Get linked issues via GitHub API
-        const { data: linkedIssues } = await octokit.pulls.listIssuesAssociatedWithPullRequest({
-            owner,
-            repo,
-            pull_number: pr.number,
-        });
-
-        if (linkedIssues.length) {
-            linkedIssues.forEach(issue => {
+        const issueNumbers = extractIssueNumbers(pr.body);
+        if (issueNumbers.length) {
+            for (const num of issueNumbers) {
+                const { data: issue } = await octokit.issues.get({ owner, repo, issue_number: num });
                 if (!issueMap.has(issue.number)) issueMap.set(issue.number, { issue, prs: [] });
                 issueMap.get(issue.number).prs.push(pr);
-            });
+            }
         } else {
             standalonePRs.push(pr);
         }
     }
 
-    // 5. Group by section
+    // 5. Group by sections
     const sectionGroups = {};
     Object.keys(SECTIONS).forEach(k => sectionGroups[k] = []);
 
-    // 5a. Issues with PRs
-    for (const { issue, prs } of issueMap.values()) {
-        const prefix = getPrefix(issue.title) || getPrefix(prs[0].title) || "Other";
+    for (const [issueNum, obj] of issueMap.entries()) {
+        const issue = obj.issue;
+        const prs = obj.prs;
+        const prefix = getPrefix(issue.title) || getPrefix(prs[0]?.title) || "Other";
         const section = SECTIONS[prefix] ? prefix : "Other";
+        const prAuthors = prs.map(p => `@${p.user.login}`).join(", ");
+        const prRefs = prs.map(p => `#${p.number}`).join(", ");
 
-        const prRefs = prs.map(pr => `#${pr.number} by @${pr.user.login}`).join(", ");
-        const line = `• ${prefix} ${stripPrefix(issue.title)} (#${issue.number})\n  ↳ PRs: ${prRefs}`;
+        const line = prs.length > 0
+            ? `• ${prefix} ${stripPrefix(issue.title)} (#${issue.number})\n  ↳ PRs: ${prRefs} by ${prAuthors}`
+            : `• ${prefix} ${stripPrefix(issue.title)} (#${issue.number})`;
+
         sectionGroups[section].push(line);
     }
 
-    // 5b. Standalone PRs
+    // Special case: PRs without issues
     for (const pr of standalonePRs) {
         const prefix = getPrefix(pr.title) || "Other";
         const section = SECTIONS[prefix] ? prefix : "Other";
-
         const line = section === "Other"
             ? `• ${pr.title} (#${pr.number}) by @${pr.user.login}`
             : `• ${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`;
-
         sectionGroups[section].push(line);
     }
 
-    // 6. Assemble release notes
+    // 6. Order sections: Tasks first, Other last
     const orderedSections = ["[Task]", ...Object.keys(SECTIONS).filter(k => k !== "[Task]" && k !== "Other"), "Other"];
+
     let body = "# 🚀 Release Notes\n\n";
     for (const key of orderedSections) {
         const items = sectionGroups[key];
-        if (items?.length) body += `## ${SECTIONS[key]}\n${items.join("\n")}\n\n`;
+        if (items?.length) {
+            body += `## ${SECTIONS[key]}\n${items.join("\n")}\n\n`;
+        }
     }
 
     // 7. Determine next patch version
