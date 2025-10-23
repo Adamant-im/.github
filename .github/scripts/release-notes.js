@@ -36,17 +36,12 @@ PREFIXES.forEach(p => {
     const norm = `[${p}]`;
     const lower = p.toLowerCase();
 
-    // Bracket variants
-    PREFIX_ALIASES[`[${lower}]`] = norm;
-    PREFIX_ALIASES[`[${p}]`] = norm;
-
-    // Plain word variants
     PREFIX_ALIASES[lower] = norm;
     PREFIX_ALIASES[p] = norm;
-
-    // Colon variants
     PREFIX_ALIASES[`${lower}:`] = norm;
     PREFIX_ALIASES[`${p}:`] = norm;
+    PREFIX_ALIASES[`[${lower}]`] = norm;
+    PREFIX_ALIASES[`[${p}]`] = norm;
 });
 
 // Strip prefix from title
@@ -57,18 +52,15 @@ function stripPrefix(title) {
 // Extract normalized prefix from title
 function getPrefix(title) {
     if (!title) return null;
-    const matchBracket = title.match(/^\[([^\]]+)\]/);
-    if (matchBracket) {
-        const norm = PREFIX_ALIASES[`[${matchBracket[1].toLowerCase()}]`];
-        if (norm) return norm;
-    }
-    const matchWord = title.match(/^([a-z/]+):/i);
-    if (matchWord) {
-        const norm = PREFIX_ALIASES[matchWord[1].toLowerCase()];
-        if (norm) return norm;
+    const cleanTitle = title.trim();
+    const match = cleanTitle.match(/^(\[[^\]]+\]|[a-z\/]+):?/i);
+    if (match) {
+        const candidate = match[1].replace(/[\[\]]/g, "").toLowerCase();
+        return PREFIX_ALIASES[candidate] || PREFIX_ALIASES[match[1]] || null;
     }
     return null;
 }
+
 
 // Extract issue numbers from PR body
 function extractIssueNumbers(prBody) {
