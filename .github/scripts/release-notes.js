@@ -60,31 +60,45 @@ function getPrefix(title) {
     return null;
 }
 
-async function main() {
-    const { data: masterCommits } = await octokit.repos.listCommits({
-        owner,
-        repo,
-        sha: "master",
-        per_page: 100,
-    });
-    const masterShaSet = new Set(masterCommits.map(c => c.sha));
+async function fetchAllPRs() {
+    const prs = [];
+    let page = 1;
+    while (true) {
+        const { data } = await octokit.pulls.list({
+            owner,
+            repo,
+            state: "closed",
+            per_page: 100,
+            page,
+        });
+        if (!data.length) break;
+        prs.push(...data);
+        page++;
+    }
+    return prs;
+}
 
-    const { data: devPRs } = await octokit.pulls.list({
+async function main() {
+    const { data: compare } = await octokit.repos.compareCommits({
         owner,
         repo,
-        state: "closed",
-        base: "dev",
-        per_page: 100,
+        base: "master",
+        head: "dev",
     });
+
+    const devShas = new Set(compare.commits.map(c => c.sha));
+
+    const allPRs = await fetchAllPRs();
 
     const pendingPRs = [];
-    for (const pr of devPRs) {
+    for (const pr of allPRs) {
         const { data: prCommits } = await octokit.pulls.listCommits({
             owner,
             repo,
-            pull_number: pr.number,
+            pull_number: pr.number
         });
-        if (prCommits.some(c => !masterShaSet.has(c.sha))) {
+
+        if (prCommits.some(c => devShas.has(c.sha))) {
             pendingPRs.push(pr);
         }
     }
@@ -94,7 +108,7 @@ async function main() {
         return;
     }
 
-    let sectionGroups = {};
+    const sectionGroups = {};
     Object.keys(SECTIONS).forEach(k => sectionGroups[k] = []);
 
     for (const pr of pendingPRs) {
