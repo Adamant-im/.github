@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - master
+      - feat/release-drafter
 
 jobs:
   release-draft:
