@@ -11,6 +11,7 @@ if (!token || !repoFull) {
 
 const octokit = new Octokit({ auth: token });
 
+// Section definitions and prefixes
 const SECTIONS = {
     "[Task]": "🚀 Tasks",
     "[Composite]": "🚀 Tasks",
@@ -41,10 +42,12 @@ PREFIXES.forEach(p => {
     PREFIX_ALIASES[`${p}:`] = norm;
 });
 
+// Strip prefix from title
 function stripPrefix(title) {
     return title.replace(/^\[[^\]]+\]\s*/, "").replace(/^[a-z/]+:\s*/i, "").trim();
 }
 
+// Extract normalized prefix from title
 function getPrefix(title) {
     if (!title) return null;
     const matchBracket = title.match(/^\[([^\]]+)\]/);
@@ -60,54 +63,43 @@ function getPrefix(title) {
     return null;
 }
 
-async function fetchAllPRs() {
-    const prs = [];
-    let page = 1;
-    while (true) {
-        const { data } = await octokit.pulls.list({
-            owner,
-            repo,
-            state: "closed",
-            per_page: 100,
-            page,
-        });
-        if (!data.length) break;
-        prs.push(...data);
-        page++;
-    }
-    return prs;
-}
-
 async function main() {
+    // 1. Get latest release (tag) on master
+    const { data: releases } = await octokit.repos.listReleases({ owner, repo });
+    const latestRelease = releases.find(r => !r.draft);
+    const latestTag = latestRelease?.tag_name;
+
+    // 2. Compare dev vs last release tag to get all commits after last release
     const { data: compare } = await octokit.repos.compareCommits({
         owner,
         repo,
-        base: "master",
+        base: latestTag || "master",
         head: "dev",
     });
 
-    const devShas = new Set(compare.commits.map(c => c.sha));
+    const devShas = compare.commits.map(c => c.sha);
 
-    const allPRs = await fetchAllPRs();
-
+    // 3. Find PRs associated with these commits
     const pendingPRs = [];
-    for (const pr of allPRs) {
-        const { data: prCommits } = await octokit.pulls.listCommits({
+    for (const sha of devShas) {
+        const { data: prs } = await octokit.repos.listPullRequestsAssociatedWithCommit({
             owner,
             repo,
-            pull_number: pr.number
+            commit_sha: sha,
         });
-
-        if (prCommits.some(c => devShas.has(c.sha))) {
-            pendingPRs.push(pr);
-        }
+        prs.forEach(pr => {
+            if (pr.merged_at && !pendingPRs.some(p => p.number === pr.number)) {
+                pendingPRs.push(pr);
+            }
+        });
     }
 
     if (!pendingPRs.length) {
-        console.log("No PRs in dev that are not yet in master.");
+        console.log("No merged PRs in dev after last release found.");
         return;
     }
 
+    // 4. Group PRs by section
     const sectionGroups = {};
     Object.keys(SECTIONS).forEach(k => sectionGroups[k] = []);
 
@@ -122,6 +114,7 @@ async function main() {
         sectionGroups[section].push(prLine);
     }
 
+    // 5. Order sections: Tasks first, Other last
     const orderedSections = ["[Task]", ...Object.keys(SECTIONS).filter(k => k !== "[Task]" && k !== "Other"), "Other"];
 
     let body = "# 🚀 Release Notes\n\n";
@@ -132,19 +125,19 @@ async function main() {
         }
     }
 
-    const { data: releases } = await octokit.repos.listReleases({ owner, repo });
-    let draft = releases.find(r => r.draft);
-
+    // 6. Determine next patch version
     let nextVersion = "v0.1.0";
-    const latest = releases.find(r => !r.draft) || releases[0];
-    if (latest) {
-        const match = latest.tag_name.match(/v(\d+)\.(\d+)\.(\d+)/);
+    const latestNonDraft = releases.find(r => !r.draft) || releases[0];
+    if (latestNonDraft) {
+        const match = latestNonDraft.tag_name.match(/v(\d+)\.(\d+)\.(\d+)/);
         if (match) {
             const [_, major, minor, patch] = match.map(Number);
             nextVersion = `v${major}.${minor}.${patch + 1}`;
         }
     }
 
+    // 7. Create or update draft release
+    const draft = releases.find(r => r.draft);
     if (draft) {
         console.log("Updating existing draft release:", draft.tag_name);
         await octokit.repos.updateRelease({
