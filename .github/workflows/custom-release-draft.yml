@@ -1,6 +1,11 @@
 name: Custom Release Draft
 
 on:
+  workflow_call:
+    inputs:
+      target_branch:
+        required: false
+        type: string
   push:
     branches:
       - master
