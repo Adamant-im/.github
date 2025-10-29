@@ -1,185 +1,106 @@
 import { Octokit } from "@octokit/rest";
+import dotenv from "dotenv";
+import { execSync } from "child_process";
 
-const token = process.env.GITHUB_TOKEN;
-const repoFull = process.env.GITHUB_REPOSITORY;
-const [owner, repo] = repoFull.split("/");
+dotenv.config();
 
-if (!token || !repoFull) {
-    console.error("GITHUB_TOKEN and GITHUB_REPOSITORY must be set");
-    process.exit(1);
-}
-
-const octokit = new Octokit({ auth: token });
-
-// Sections definitions
-const SECTIONS = {
-    "🚀 Tasks": ["Task", "Composite"],
-    "✨ New Features": ["Feat"],
-    "🔧 Enhancements": ["Enhancement", "UX/UI"],
-    "🐞 Bug Fixes": ["Bug"],
-    "♻️ Refactoring": ["Refactor"],
-    "📚 Documentation": ["Docs"],
-    "🧪 Tests": ["Test"],
-    "🧹 Chores": ["Chore"],
-    "📦 Other": ["Other"],
-};
-
-// Normalize prefixes for PR titles
-const PREFIX_ALIASES = {};
-Object.keys(SECTIONS).forEach(section => {
-    SECTIONS[section].forEach(p => {
-        const lower = p.toLowerCase();
-        PREFIX_ALIASES[p] = section;
-        PREFIX_ALIASES[lower] = section;
-        PREFIX_ALIASES[`${p}:`] = section;
-        PREFIX_ALIASES[`${lower}:`] = section;
-        PREFIX_ALIASES[`[${p}]`] = section;
-        PREFIX_ALIASES[`[${lower}]`] = section;
-    });
-});
-
-function stripPrefix(title) {
-    return title.replace(/^\[[^\]]+\]\s*/, "").replace(/^[a-z/]+:\s*/i, "").trim();
-}
-
-function getSectionFromPRTitle(title) {
-    if (!title) return "📦 Other";
-    const matchBracket = title.match(/^\[([^\]]+)\]/);
-    if (matchBracket && PREFIX_ALIASES[`[${matchBracket[1].toLowerCase()}]`]) {
-        return PREFIX_ALIASES[`[${matchBracket[1].toLowerCase()}]`];
+// === Detect repository info automatically ===
+function detectRepo() {
+    // 1️⃣ If running inside GitHub Actions
+    if (process.env.GITHUB_REPOSITORY) {
+        const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
+        return { owner, repo };
     }
-    const matchWord = title.match(/^([a-z/]+):?/i);
-    if (matchWord && PREFIX_ALIASES[matchWord[1].toLowerCase()]) {
-        return PREFIX_ALIASES[matchWord[1].toLowerCase()];
+
+    // 2️⃣ Otherwise, try reading from local git config
+    try {
+        const remoteUrl = execSync("git config --get remote.origin.url").toString().trim();
+        // Handles both SSH (git@github.com:org/repo.git) and HTTPS (https://github.com/org/repo.git)
+        const match = remoteUrl.match(/[:/]([^/]+)\/([^/]+)(?:\.git)?$/);
+        if (match) {
+            return { owner: match[1], repo: match[2] };
+        }
+    } catch {
+        console.warn("⚠️ Could not detect repository from git remote.");
     }
-    return "📦 Other";
+
+    throw new Error("❌ Repository could not be detected. Run inside a git repo or set GITHUB_REPOSITORY.");
 }
+
+// === Config ===
+const DEV_BRANCH = "dev";
+const MASTER_BRANCH = "master";
+const { owner: OWNER, repo: REPO } = detectRepo();
+
+// === Init GitHub API client ===
+const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 async function main() {
-    // 1. Get latest release tag on master
-    const { data: releases } = await octokit.repos.listReleases({ owner, repo });
-    const latestRelease = releases.find(r => !r.draft);
-    const latestTag = latestRelease?.tag_name || "master";
+    // 1️⃣ Get latest release
+    let lastRelease = null;
+    try {
+        const { data } = await octokit.repos.listReleases({
+            owner: OWNER,
+            repo: REPO,
+            per_page: 1,
+        });
+        lastRelease = data[0] || null;
+    } catch {
+        console.log("⚠️ Could not fetch releases — maybe there are none yet.");
+    }
 
-    // 2. Compare dev vs last release tag
-    const { data: compare } = await octokit.repos.compareCommits({
-        owner,
-        repo,
-        base: latestTag,
-        head: "dev",
+    const since = lastRelease ? new Date(lastRelease.created_at) : null;
+
+    // 2️⃣ Determine which branch to compare
+    const branches = await octokit.repos.listBranches({ owner: OWNER, repo: REPO });
+    const branchNames = branches.data.map((b) => b.name);
+
+    let targetBranch = MASTER_BRANCH;
+
+    // If `dev` exists and has commits after the last release → use it
+    if (branchNames.includes(DEV_BRANCH) && lastRelease) {
+        try {
+            const compare = await octokit.repos.compareCommits({
+                owner: OWNER,
+                repo: REPO,
+                base: lastRelease.tag_name,
+                head: DEV_BRANCH,
+            });
+            if (compare.data.commits.length > 0) {
+                targetBranch = DEV_BRANCH;
+            }
+        } catch {
+            console.warn("⚠️ Failed to compare commits, falling back to master.");
+        }
+    }
+
+    // 3️⃣ Fetch closed PRs for the selected branch
+    const { data: prs } = await octokit.pulls.list({
+        owner: OWNER,
+        repo: REPO,
+        state: "closed",
+        base: targetBranch,
+        per_page: 100,
     });
 
-    const devShas = compare.commits.map(c => c.sha);
+    // 4️⃣ Filter PRs that are merged and newer than the last release
+    const mergedPRs = prs.filter(
+        (pr) => pr.merged_at && (!since || new Date(pr.merged_at) > since)
+    );
 
-    // 3. Find merged PRs associated with these commits
-    const pendingPRs = [];
-    for (const sha of devShas) {
-        const { data: prs } = await octokit.repos.listPullRequestsAssociatedWithCommit({
-            owner,
-            repo,
-            commit_sha: sha,
-        });
-        prs.forEach(pr => {
-            if (pr.merged_at && !pendingPRs.some(p => p.number === pr.number)) {
-                pendingPRs.push(pr);
-            }
-        });
-    }
+    // 5️⃣ Output
+    console.log(`📦 Repository: ${OWNER}/${REPO}`);
+    console.log(`📍 Target branch: ${targetBranch}`);
+    console.log(`🕓 Last release: ${lastRelease ? lastRelease.tag_name : "none"}`);
+    console.log(`✅ Found ${mergedPRs.length} merged PRs:\n`);
 
-    if (!pendingPRs.length) {
-        console.log("No merged PRs in dev after last release found.");
-        return;
-    }
-
-    // 4. Build issue map from linked issues
-    const issueMap = new Map();
-
-    for (const pr of pendingPRs) {
-        // Get issues linked to PR
-        const { data: linkedIssues } = await octokit.rest.pulls.listIssuesAssociatedWithPullRequest({
-            owner,
-            repo,
-            pull_number: pr.number,
-        });
-
-        if (linkedIssues.length) {
-            for (const issue of linkedIssues) {
-                if (!issueMap.has(issue.number)) issueMap.set(issue.number, { ...issue, prs: [] });
-                issueMap.get(issue.number).prs.push(pr);
-            }
-        } else {
-            // PR without issue
-            const key = `pr-${pr.number}`;
-            issueMap.set(key, { title: pr.title, prs: [pr], isStandalone: true });
-        }
-    }
-
-    // 5. Group by sections
-    const sectionGroups = {};
-    Object.values(SECTIONS).forEach(sec => sectionGroups[sec[0]] = []);
-    sectionGroups["📦 Other"] = [];
-
-    for (const issue of issueMap.values()) {
-        if (issue.isStandalone) {
-            const pr = issue.prs[0];
-            const section = getSectionFromPRTitle(pr.title);
-            const line = `• ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`;
-            sectionGroups[section].push(line);
-        } else {
-            // Issue with PRs
-            const issuePrefix = getSectionFromPRTitle(issue.title);
-            const prRefs = issue.prs.map(pr => `#${pr.number} by @${pr.user.login}`).join(", ");
-            const line = `• ${stripPrefix(issue.title)} (#${issue.number})\n  ↳ PRs: ${prRefs}`;
-            sectionGroups[issuePrefix].push(line);
-        }
-    }
-
-    // 6. Order sections: Tasks first, Other last
-    const orderedSections = ["🚀 Tasks", "✨ New Features", "🔧 Enhancements", "🐞 Bug Fixes", "♻️ Refactoring", "📚 Documentation", "🧪 Tests", "🧹 Chores", "📦 Other"];
-
-    let body = "# 🚀 Release Notes\n\n";
-    for (const key of orderedSections) {
-        const items = sectionGroups[key];
-        if (items?.length) body += `## ${key}\n${items.join("\n")}\n\n`;
-    }
-
-    // 7. Determine next patch version
-    let nextVersion = "v0.1.0";
-    if (latestRelease) {
-        const match = latestRelease.tag_name.match(/v(\d+)\.(\d+)\.(\d+)/);
-        if (match) {
-            const [_, major, minor, patch] = match.map(Number);
-            nextVersion = `v${major}.${minor}.${patch + 1}`;
-        }
-    }
-
-    // 8. Create/update draft release
-    const draft = releases.find(r => r.draft);
-    if (draft) {
-        console.log("Updating existing draft release:", draft.tag_name);
-        await octokit.repos.updateRelease({
-            owner,
-            repo,
-            release_id: draft.id,
-            name: nextVersion,
-            body,
-        });
-    } else {
-        console.log("Creating new draft release");
-        await octokit.repos.createRelease({
-            owner,
-            repo,
-            tag_name: nextVersion,
-            name: nextVersion,
-            body,
-            draft: true,
-        });
-    }
-
-    console.log("✅ Draft release updated successfully");
+    mergedPRs.forEach((pr) => {
+        console.log(`#${pr.number} ${pr.title} (${pr.user.login}) — ${pr.merged_at}`);
+        console.log(`→ ${pr.html_url}\n`);
+    });
 }
 
-main().catch(err => {
-    console.error(err);
+main().catch((err) => {
+    console.error("Error:", err);
     process.exit(1);
 });
