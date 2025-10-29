@@ -77,7 +77,9 @@ async function getLinkedIssues(prNumber) {
 
 // --- Classify title by flexible prefix ---
 function classifyTitle(title) {
-    const match = title.match(/^\s*(?:\[([^\]]+)\]|([^\s:]+))\s*:?\s*/i);
+    const cleaned = title.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, '');
+
+    const match = cleaned.match(/^\s*(?:\[([^\]]+)\]|([^\s:]+))\s*:?\s*/i);
     const rawPrefix = match ? (match[1] || match[2]) : null;
     if (!rawPrefix) return "Other";
 
@@ -101,6 +103,7 @@ function classifyTitle(title) {
 
     return map[prefix] || "Other";
 }
+
 
 
 // --- Main function ---
