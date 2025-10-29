@@ -23,7 +23,7 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm install @octokit/rest
+        run: npm install @octokit/rest @octokit/graphql
 
       - name: Run release notes script
         run: node .github/scripts/release-notes.js
