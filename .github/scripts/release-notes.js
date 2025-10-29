@@ -204,14 +204,14 @@ async function main() {
 
     console.log(releaseNotesText);
 
-    // 7️⃣ Create GitHub release
+    // 7️⃣ Create GitHub release (as draft)
     await octokit.repos.createRelease({
         owner: OWNER,
         repo: REPO,
         tag_name: newTag,
         name: `Release ${newTag}`,
         body: releaseNotesText,
-        draft: false,
+        draft: true,
         prerelease: false,
     });
 
