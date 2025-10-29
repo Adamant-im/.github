@@ -77,11 +77,11 @@ async function getLinkedIssues(prNumber) {
 
 // --- Classify title by flexible prefix ---
 function classifyTitle(title) {
-    const cleaned = title.replace(/^[\s\p{Emoji_Presentation}\p{Emoji}\p{Extended_Pictographic}]+/u, "");
-    const match = cleaned.match(/^([a-zA-Z\/]+)/);
-    const prefix = match ? match[1].toLowerCase() : null;
+    const match = title.match(/^\s*(?:\[([^\]]+)\]|([^\s:]+))\s*:?\s*/i);
+    const rawPrefix = match ? (match[1] || match[2]) : null;
+    if (!rawPrefix) return "Other";
 
-    if (!prefix) return "Other";
+    const prefix = rawPrefix.toLowerCase();
 
     const map = {
         "task": "🚀 Tasks",
@@ -101,6 +101,7 @@ function classifyTitle(title) {
 
     return map[prefix] || "Other";
 }
+
 
 // --- Main function ---
 async function main() {
