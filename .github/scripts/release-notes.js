@@ -169,7 +169,12 @@ async function main() {
 
     for (const [num, info] of Object.entries(issueMap)) {
         const section = classifyTitle(info.title);
-        sections[section].push(`#${num} ${info.title} ↳ PRs: ${info.prs.map(n => `#${n}`).join(", ")}`);
+        sections[section].push(
+            `#${num} ${info.title} ↳ PRs: ${info.prs
+                .sort((a, b) => a - b) // сортировка по возрастанию
+                .map(n => `#${n}`)
+                .join(", ")}`
+        );
     }
 
     for (const pr of prsWithoutIssue) {
