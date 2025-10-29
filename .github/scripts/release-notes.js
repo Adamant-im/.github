@@ -2,21 +2,21 @@ import { Octokit } from "@octokit/rest";
 import { graphql } from "@octokit/graphql";
 import { execSync } from "child_process";
 
+// --- Detect repository ---
 function detectRepo() {
     if (process.env.GITHUB_REPOSITORY) {
         const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
         return { owner, repo };
     }
-
     try {
         const remoteUrl = execSync("git config --get remote.origin.url").toString().trim();
         const match = remoteUrl.match(/[:/]([^/]+)\/([^/]+)(?:\.git)?$/);
         if (match) return { owner: match[1], repo: match[2] };
     } catch {}
-
     throw new Error("❌ Repository could not be detected.");
 }
 
+// --- Config ---
 const DEV_BRANCH = "dev";
 const MASTER_BRANCH = "master";
 const { owner: OWNER, repo: REPO } = detectRepo();
@@ -26,11 +26,11 @@ const graphqlWithAuth = graphql.defaults({
     headers: { authorization: `token ${process.env.GITHUB_TOKEN}` },
 });
 
+// --- Fetch all closed PRs ---
 async function getAllPRs({ owner, repo, base }) {
     const perPage = 100;
     let page = 1;
     let all = [];
-
     while (true) {
         const { data } = await octokit.pulls.list({
             owner,
@@ -40,17 +40,15 @@ async function getAllPRs({ owner, repo, base }) {
             per_page: perPage,
             page,
         });
-
         if (!data.length) break;
         all = all.concat(data);
         if (data.length < perPage) break;
         page++;
     }
-
     return all;
 }
 
-// Get linked issues for a PR via GraphQL
+// --- Get linked issues via GraphQL ---
 async function getLinkedIssues(prNumber) {
     const query = `
     query ($owner: String!, $repo: String!, $number: Int!) {
@@ -77,8 +75,35 @@ async function getLinkedIssues(prNumber) {
     }
 }
 
+// --- Classify title by flexible prefix ---
+function classifyTitle(title) {
+    const match = title.match(/^\[?([a-zA-Z\/]+)\]?:?/);
+    const prefix = match ? match[1].toLowerCase() : null;
+
+    if (!prefix) return "Other";
+
+    const map = {
+        "task": "🚀 Tasks",
+        "composite": "🚀 Tasks",
+        "ux/ui": "🔧 Enhancements",
+        "enhancement": "🔧 Enhancements",
+        "bug": "🐞 Bug Fixes",
+        "feat": "✨ New Features",
+        "refactor": "🛠 Refactoring",
+        "docs": "📚 Documentation",
+        "test": "✅ Tests",
+        "chore": "⚙️ Chores",
+        "proposal": "💡 Ideas & Proposals",
+        "idea": "💡 Ideas & Proposals",
+        "discussion": "💡 Ideas & Proposals",
+    };
+
+    return map[prefix] || "Other";
+}
+
+// --- Main function ---
 async function main() {
-    // 1️⃣ Get latest release
+    // 1️⃣ Latest release
     let lastRelease = null;
     try {
         const { data } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 1 });
@@ -87,11 +112,10 @@ async function main() {
 
     const since = lastRelease ? new Date(lastRelease.created_at) : null;
 
-    // 2️⃣ Determine branch
+    // 2️⃣ Target branch
     const branches = await octokit.repos.listBranches({ owner: OWNER, repo: REPO });
     const branchNames = branches.data.map(b => b.name);
     let targetBranch = MASTER_BRANCH;
-
     if (branchNames.includes(DEV_BRANCH) && lastRelease) {
         try {
             const compare = await octokit.repos.compareCommits({
@@ -109,7 +133,7 @@ async function main() {
     const mergedPRs = prs.filter(pr => pr.merged_at && (!since || new Date(pr.merged_at) > since));
 
     // 4️⃣ Build issue → PR map
-    const issueMap = {}; // key: issue number, value: { title, PR numbers }
+    const issueMap = {};
     const prsWithoutIssue = [];
 
     for (const pr of mergedPRs) {
@@ -124,24 +148,41 @@ async function main() {
         }
     }
 
-    // 5️⃣ Output
-    console.log(`📦 Repository: ${OWNER}/${REPO}`);
-    console.log(`📍 Target branch: ${targetBranch}`);
-    console.log(`🕓 Last release: ${lastRelease ? lastRelease.tag_name : "none"}`);
-    console.log(`\n✅ Issues with linked PRs:\n`);
+    // 5️⃣ Classify
+    const sections = {
+        "🚀 Tasks": [],
+        "🔧 Enhancements": [],
+        "🐞 Bug Fixes": [],
+        "✨ New Features": [],
+        "🛠 Refactoring": [],
+        "📚 Documentation": [],
+        "✅ Tests": [],
+        "⚙️ Chores": [],
+        "💡 Ideas & Proposals": [],
+        Other: [],
+    };
 
-    for (const [issueNum, info] of Object.entries(issueMap)) {
-        console.log(`#${issueNum} ${info.title} ↳ PRs: ${info.prs.map(n => `#${n}`).join(", ")}`);
+    for (const [num, info] of Object.entries(issueMap)) {
+        const section = classifyTitle(info.title);
+        sections[section].push(`#${num} ${info.title} ↳ PRs: ${info.prs.map(n => `#${n}`).join(", ")}`);
     }
 
-    if (prsWithoutIssue.length) {
-        console.log(`\n✅ PRs without linked issues:\n`);
-        for (const pr of prsWithoutIssue) {
-            console.log(`#${pr.number} ${pr.title}`);
-        }
+    for (const pr of prsWithoutIssue) {
+        const section = classifyTitle(pr.title);
+        sections[section].push(`#${pr.number} ${pr.title}`);
+    }
+
+    // 6️⃣ Print release notes
+    console.log(`## Draft Release Notes\n`);
+    for (const [sectionName, items] of Object.entries(sections)) {
+        if (!items.length) continue;
+        console.log(`### ${sectionName}\n`);
+        items.forEach(i => console.log(`- ${i}`));
+        console.log(""); // blank line
     }
 }
 
+// --- Run ---
 main().catch(err => {
     console.error("Error:", err);
     process.exit(1);
