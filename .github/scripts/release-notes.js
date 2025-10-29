@@ -77,14 +77,13 @@ async function getLinkedIssues(prNumber) {
 
 // --- Classify title by flexible prefix ---
 function classifyTitle(title) {
+    // remove leading emoji and spaces
     const cleaned = title.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, '');
-
     const match = cleaned.match(/^\s*(?:\[([^\]]+)\]|([^\s:]+))\s*:?\s*/i);
     const rawPrefix = match ? (match[1] || match[2]) : null;
     if (!rawPrefix) return "Other";
 
     const prefix = rawPrefix.toLowerCase();
-
     const map = {
         "task": "🚀 Tasks",
         "composite": "🚀 Tasks",
@@ -104,7 +103,16 @@ function classifyTitle(title) {
     return map[prefix] || "Other";
 }
 
+// --- Semantic versioning ---
+function nextVersion(lastTag) {
+    if (!lastTag) return "v0.1.0";
+    const match = lastTag.match(/^v(\d+)\.(\d+)\.(\d+)/);
+    if (!match) return "v0.1.0";
 
+    let [_, major, minor, patch] = match.map(Number);
+    patch += 1;
+    return `v${major}.${minor}.${patch}`;
+}
 
 // --- Main function ---
 async function main() {
@@ -116,6 +124,8 @@ async function main() {
     } catch {}
 
     const since = lastRelease ? new Date(lastRelease.created_at) : null;
+    const lastTag = lastRelease?.tag_name || null;
+    const newTag = nextVersion(lastTag);
 
     // 2️⃣ Target branch
     const branches = await octokit.repos.listBranches({ owner: OWNER, repo: REPO });
@@ -182,14 +192,30 @@ async function main() {
         sections[section].push(`#${pr.number} ${pr.title}`);
     }
 
-    // 6️⃣ Print release notes
-    console.log(`## Draft Release Notes\n`);
+    // 6️⃣ Build release notes text
+    let releaseNotesText = `## Draft Release Notes\n\n`;
     for (const [sectionName, items] of Object.entries(sections)) {
         if (!items.length) continue;
-        console.log(`### ${sectionName}\n`);
-        items.forEach(i => console.log(`- ${i}`));
-        console.log(""); // blank line
+        items.sort((a, b) => parseInt(a.match(/#(\d+)/)[1]) - parseInt(b.match(/#(\d+)/)[1]));
+        releaseNotesText += `### ${sectionName}\n`;
+        items.forEach(i => releaseNotesText += `- ${i}\n`);
+        releaseNotesText += `\n`;
     }
+
+    console.log(releaseNotesText);
+
+    // 7️⃣ Create GitHub release
+    await octokit.repos.createRelease({
+        owner: OWNER,
+        repo: REPO,
+        tag_name: newTag,
+        name: `Release ${newTag}`,
+        body: releaseNotesText,
+        draft: false,
+        prerelease: false,
+    });
+
+    console.log(`✅ Release created: ${newTag}`);
 }
 
 // --- Run ---
