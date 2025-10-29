@@ -203,17 +203,36 @@ async function main() {
     }
 
     console.log(releaseNotesText);
+    // --- Find or create draft release ---
+    let draftRelease = null;
+    try {
+        const { data: releases } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 10 });
+        draftRelease = releases.find(r => r.draft);
+    } catch {}
 
-    // 7️⃣ Create GitHub release (as draft)
-    await octokit.repos.createRelease({
-        owner: OWNER,
-        repo: REPO,
-        tag_name: newTag,
-        name: `Release ${newTag}`,
-        body: releaseNotesText,
-        draft: true,
-        prerelease: false,
-    });
+    if (draftRelease) {
+        // Update existing draft
+        await octokit.repos.updateRelease({
+            owner: OWNER,
+            repo: REPO,
+            release_id: draftRelease.id,
+            body: releaseNotesText,
+            name: `Release ${draftRelease.tag_name}`,
+        });
+        console.log(`✅ Draft release updated: ${draftRelease.tag_name}`);
+    } else {
+        // Create new draft
+        await octokit.repos.createRelease({
+            owner: OWNER,
+            repo: REPO,
+            tag_name: newTag,
+            name: `Release ${newTag}`,
+            body: releaseNotesText,
+            draft: true,
+            prerelease: false,
+        });
+        console.log(`✅ Draft release created: ${newTag}`);
+    }
 
     console.log(`✅ Release created: ${newTag}`);
 }
