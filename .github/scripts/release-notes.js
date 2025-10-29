@@ -1,21 +1,17 @@
 import { Octokit } from "@octokit/rest";
-import dotenv from "dotenv";
 import { execSync } from "child_process";
-
-dotenv.config();
 
 // === Detect repository info automatically ===
 function detectRepo() {
-    // 1️⃣ If running inside GitHub Actions
+    // 1️⃣ Inside GitHub Actions → use GITHUB_REPOSITORY
     if (process.env.GITHUB_REPOSITORY) {
         const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
         return { owner, repo };
     }
 
-    // 2️⃣ Otherwise, try reading from local git config
+    // 2️⃣ Local fallback → detect from git remote
     try {
         const remoteUrl = execSync("git config --get remote.origin.url").toString().trim();
-        // Handles both SSH (git@github.com:org/repo.git) and HTTPS (https://github.com/org/repo.git)
         const match = remoteUrl.match(/[:/]([^/]+)\/([^/]+)(?:\.git)?$/);
         if (match) {
             return { owner: match[1], repo: match[2] };
@@ -24,7 +20,7 @@ function detectRepo() {
         console.warn("⚠️ Could not detect repository from git remote.");
     }
 
-    throw new Error("❌ Repository could not be detected. Run inside a git repo or set GITHUB_REPOSITORY.");
+    throw new Error("❌ Repository could not be detected.");
 }
 
 // === Config ===
@@ -46,18 +42,17 @@ async function main() {
         });
         lastRelease = data[0] || null;
     } catch {
-        console.log("⚠️ Could not fetch releases — maybe there are none yet.");
+        console.log("⚠️ Could not fetch releases — maybe none exist yet.");
     }
 
     const since = lastRelease ? new Date(lastRelease.created_at) : null;
 
-    // 2️⃣ Determine which branch to compare
+    // 2️⃣ Determine branch to use
     const branches = await octokit.repos.listBranches({ owner: OWNER, repo: REPO });
     const branchNames = branches.data.map((b) => b.name);
 
     let targetBranch = MASTER_BRANCH;
 
-    // If `dev` exists and has commits after the last release → use it
     if (branchNames.includes(DEV_BRANCH) && lastRelease) {
         try {
             const compare = await octokit.repos.compareCommits({
@@ -70,11 +65,11 @@ async function main() {
                 targetBranch = DEV_BRANCH;
             }
         } catch {
-            console.warn("⚠️ Failed to compare commits, falling back to master.");
+            console.warn("⚠️ Could not compare commits, falling back to master.");
         }
     }
 
-    // 3️⃣ Fetch closed PRs for the selected branch
+    // 3️⃣ Get closed PRs for target branch
     const { data: prs } = await octokit.pulls.list({
         owner: OWNER,
         repo: REPO,
@@ -83,7 +78,7 @@ async function main() {
         per_page: 100,
     });
 
-    // 4️⃣ Filter PRs that are merged and newer than the last release
+    // 4️⃣ Filter merged PRs after the last release
     const mergedPRs = prs.filter(
         (pr) => pr.merged_at && (!since || new Date(pr.merged_at) > since)
     );
