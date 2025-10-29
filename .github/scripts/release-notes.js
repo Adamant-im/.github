@@ -1,5 +1,5 @@
 import { Octokit } from "@octokit/rest";
-import graphql from "@octokit/graphql";
+import { graphql } from "@octokit/graphql"; // <-- вот так правильно
 import { execSync } from "child_process";
 
 // === Detect repository automatically ===
