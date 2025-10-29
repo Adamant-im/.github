@@ -1,7 +1,8 @@
 import { Octokit } from "@octokit/rest";
+import graphql from "@octokit/graphql";
 import { execSync } from "child_process";
-import { request } from "@octokit/graphql";
 
+// === Detect repository automatically ===
 function detectRepo() {
     if (process.env.GITHUB_REPOSITORY) {
         const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
@@ -21,16 +22,18 @@ function detectRepo() {
     throw new Error("❌ Repository could not be detected.");
 }
 
+// === Config ===
 const DEV_BRANCH = "dev";
 const MASTER_BRANCH = "master";
 const { owner: OWNER, repo: REPO } = detectRepo();
 
+// === Octokit clients ===
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-const graphqlWithAuth = request.defaults({
+const graphqlWithAuth = graphql.defaults({
     headers: { authorization: `token ${process.env.GITHUB_TOKEN}` },
 });
 
-// === Helper: get all PRs with pagination ===
+// === Fetch all closed PRs with pagination ===
 async function getAllPulls({ owner, repo, base }) {
     const perPage = 100;
     let page = 1;
@@ -55,7 +58,7 @@ async function getAllPulls({ owner, repo, base }) {
     return all;
 }
 
-// === Helper: get issues linked to PR via GraphQL ===
+// === Fetch linked issues for a PR via GraphQL ===
 async function getLinkedIssues(owner, repo, prNumber) {
     const query = `
     query ($owner: String!, $repo: String!, $number: Int!) {
@@ -76,14 +79,14 @@ async function getLinkedIssues(owner, repo, prNumber) {
 
     try {
         const response = await graphqlWithAuth(query, { owner, repo, number: prNumber });
-        const issues = response.repository.pullRequest.closingIssuesReferences.nodes || [];
-        return issues;
+        return response.repository.pullRequest.closingIssuesReferences.nodes || [];
     } catch (err) {
-        console.warn(`⚠️ Failed to get linked issues for PR #${prNumber}:`, err.message);
+        console.warn(`⚠️ Failed to fetch linked issues for PR #${prNumber}: ${err.message}`);
         return [];
     }
 }
 
+// === Main script ===
 async function main() {
     // 1️⃣ Get latest release
     let lastRelease = null;
@@ -161,6 +164,7 @@ async function main() {
     }
 }
 
+// === Run script ===
 main().catch((err) => {
     console.error("Error:", err);
     process.exit(1);
