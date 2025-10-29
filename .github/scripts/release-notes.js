@@ -1,15 +1,13 @@
 import { Octokit } from "@octokit/rest";
 import { execSync } from "child_process";
+import { request } from "@octokit/graphql";
 
-// === Detect repository info automatically ===
 function detectRepo() {
-    // 1️⃣ Inside GitHub Actions → use GITHUB_REPOSITORY
     if (process.env.GITHUB_REPOSITORY) {
         const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
         return { owner, repo };
     }
 
-    // 2️⃣ Local fallback → detect from git remote
     try {
         const remoteUrl = execSync("git config --get remote.origin.url").toString().trim();
         const match = remoteUrl.match(/[:/]([^/]+)\/([^/]+)(?:\.git)?$/);
@@ -23,13 +21,68 @@ function detectRepo() {
     throw new Error("❌ Repository could not be detected.");
 }
 
-// === Config ===
 const DEV_BRANCH = "dev";
 const MASTER_BRANCH = "master";
 const { owner: OWNER, repo: REPO } = detectRepo();
 
-// === Init GitHub API client ===
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+const graphqlWithAuth = request.defaults({
+    headers: { authorization: `token ${process.env.GITHUB_TOKEN}` },
+});
+
+// === Helper: get all PRs with pagination ===
+async function getAllPulls({ owner, repo, base }) {
+    const perPage = 100;
+    let page = 1;
+    let all = [];
+
+    while (true) {
+        const { data } = await octokit.pulls.list({
+            owner,
+            repo,
+            state: "closed",
+            base,
+            per_page: perPage,
+            page,
+        });
+
+        if (!data.length) break;
+        all = all.concat(data);
+        if (data.length < perPage) break;
+        page++;
+    }
+
+    return all;
+}
+
+// === Helper: get issues linked to PR via GraphQL ===
+async function getLinkedIssues(owner, repo, prNumber) {
+    const query = `
+    query ($owner: String!, $repo: String!, $number: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number) {
+          closingIssuesReferences(first: 10) {
+            nodes {
+              number
+              title
+              state
+              url
+            }
+          }
+        }
+      }
+    }
+  `;
+
+    try {
+        const response = await graphqlWithAuth(query, { owner, repo, number: prNumber });
+        const issues = response.repository.pullRequest.closingIssuesReferences.nodes || [];
+        return issues;
+    } catch (err) {
+        console.warn(`⚠️ Failed to get linked issues for PR #${prNumber}:`, err.message);
+        return [];
+    }
+}
 
 async function main() {
     // 1️⃣ Get latest release
@@ -47,10 +100,9 @@ async function main() {
 
     const since = lastRelease ? new Date(lastRelease.created_at) : null;
 
-    // 2️⃣ Determine branch to use
+    // 2️⃣ Determine target branch
     const branches = await octokit.repos.listBranches({ owner: OWNER, repo: REPO });
     const branchNames = branches.data.map((b) => b.name);
-
     let targetBranch = MASTER_BRANCH;
 
     if (branchNames.includes(DEV_BRANCH) && lastRelease) {
@@ -69,30 +121,44 @@ async function main() {
         }
     }
 
-    // 3️⃣ Get closed PRs for target branch
-    const { data: prs } = await octokit.pulls.list({
-        owner: OWNER,
-        repo: REPO,
-        state: "closed",
-        base: targetBranch,
-        per_page: 100,
-    });
-
-    // 4️⃣ Filter merged PRs after the last release
+    // 3️⃣ Fetch merged PRs
+    const prs = await getAllPulls({ owner: OWNER, repo: REPO, base: targetBranch });
     const mergedPRs = prs.filter(
         (pr) => pr.merged_at && (!since || new Date(pr.merged_at) > since)
     );
+
+    // 4️⃣ Fetch linked issues for each PR
+    const result = [];
+    for (const pr of mergedPRs) {
+        const issues = await getLinkedIssues(OWNER, REPO, pr.number);
+
+        result.push({
+            number: pr.number,
+            title: pr.title,
+            user: pr.user.login,
+            merged_at: pr.merged_at,
+            url: pr.html_url,
+            issues,
+        });
+    }
 
     // 5️⃣ Output
     console.log(`📦 Repository: ${OWNER}/${REPO}`);
     console.log(`📍 Target branch: ${targetBranch}`);
     console.log(`🕓 Last release: ${lastRelease ? lastRelease.tag_name : "none"}`);
-    console.log(`✅ Found ${mergedPRs.length} merged PRs:\n`);
+    console.log(`✅ Found ${result.length} merged PRs:\n`);
 
-    mergedPRs.forEach((pr) => {
-        console.log(`#${pr.number} ${pr.title} (${pr.user.login}) — ${pr.merged_at}`);
-        console.log(`→ ${pr.html_url}\n`);
-    });
+    for (const pr of result) {
+        console.log(`#${pr.number} ${pr.title} (${pr.user}) — ${pr.merged_at}`);
+        if (pr.issues.length) {
+            pr.issues.forEach((i) =>
+                console.log(`   ↳ #${i.number} ${i.title} (${i.state}) → ${i.url}`)
+            );
+        } else {
+            console.log("   ↳ no linked issues");
+        }
+        console.log(`→ ${pr.url}\n`);
+    }
 }
 
 main().catch((err) => {
