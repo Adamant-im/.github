@@ -77,7 +77,8 @@ async function getLinkedIssues(prNumber) {
 
 // --- Classify title by flexible prefix ---
 function classifyTitle(title) {
-    const match = title.match(/^\[?([a-zA-Z\/]+)\]?:?/);
+    const cleaned = title.replace(/^[\s\p{Emoji_Presentation}\p{Emoji}\p{Extended_Pictographic}]+/u, "");
+    const match = cleaned.match(/^([a-zA-Z\/]+)/);
     const prefix = match ? match[1].toLowerCase() : null;
 
     if (!prefix) return "Other";
