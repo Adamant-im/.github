@@ -11,12 +11,8 @@ function detectRepo() {
     try {
         const remoteUrl = execSync("git config --get remote.origin.url").toString().trim();
         const match = remoteUrl.match(/[:/]([^/]+)\/([^/]+)(?:\.git)?$/);
-        if (match) {
-            return { owner: match[1], repo: match[2] };
-        }
-    } catch {
-        console.warn("⚠️ Could not detect repository from git remote.");
-    }
+        if (match) return { owner: match[1], repo: match[2] };
+    } catch {}
 
     throw new Error("❌ Repository could not be detected.");
 }
@@ -63,6 +59,7 @@ async function getLinkedIssues(prNumber) {
           closingIssuesReferences(first: 10) {
             nodes {
               number
+              title
             }
           }
         }
@@ -71,7 +68,10 @@ async function getLinkedIssues(prNumber) {
   `;
     try {
         const response = await graphqlWithAuth(query, { owner: OWNER, repo: REPO, number: prNumber });
-        return response.repository.pullRequest.closingIssuesReferences.nodes.map(i => i.number);
+        return response.repository.pullRequest.closingIssuesReferences.nodes.map(i => ({
+            number: i.number,
+            title: i.title,
+        }));
     } catch {
         return [];
     }
@@ -109,15 +109,15 @@ async function main() {
     const mergedPRs = prs.filter(pr => pr.merged_at && (!since || new Date(pr.merged_at) > since));
 
     // 4️⃣ Build issue → PR map
-    const issueToPRs = {};
+    const issueMap = {}; // key: issue number, value: { title, PR numbers }
     const prsWithoutIssue = [];
 
     for (const pr of mergedPRs) {
         const linkedIssues = await getLinkedIssues(pr.number);
         if (linkedIssues.length) {
-            for (const issueNum of linkedIssues) {
-                if (!issueToPRs[issueNum]) issueToPRs[issueNum] = [];
-                issueToPRs[issueNum].push(pr.number);
+            for (const issue of linkedIssues) {
+                if (!issueMap[issue.number]) issueMap[issue.number] = { title: issue.title, prs: [] };
+                issueMap[issue.number].prs.push(pr.number);
             }
         } else {
             prsWithoutIssue.push(pr);
@@ -130,8 +130,8 @@ async function main() {
     console.log(`🕓 Last release: ${lastRelease ? lastRelease.tag_name : "none"}`);
     console.log(`\n✅ Issues with linked PRs:\n`);
 
-    for (const [issueNum, prNumbers] of Object.entries(issueToPRs)) {
-        console.log(`#${issueNum} ↳ PRs: ${prNumbers.map(n => `#${n}`).join(", ")}`);
+    for (const [issueNum, info] of Object.entries(issueMap)) {
+        console.log(`#${issueNum} ${info.title} ↳ PRs: ${info.prs.map(n => `#${n}`).join(", ")}`);
     }
 
     if (prsWithoutIssue.length) {
