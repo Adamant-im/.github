@@ -77,11 +77,18 @@ function classifyTitle(title) {
 // --- Normalize title for display (keep all prefixes in brackets as-is) ---
 function normalizeTitleForNotes(title) {
     let t = title.trim();
-    const match = t.match(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]*\s*(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui|proposal|idea|discussion)[:\s-]+/i);
+
+    // Match leading emoji + optional :emoji: + optional text prefix like chore:, feat:, etc.
+    const match = t.match(/^([\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+|(:[a-zA-Z0-9_+-]+:)+)\s*(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
     if (match) {
-        const prefix = match[1];
-        t = t.replace(match[0], `[${prefix.charAt(0).toUpperCase() + prefix.slice(1).toLowerCase()}] `);
+        const prefix = match[3].toLowerCase();
+        const sectionName = PREFIX_MAP[prefix];
+        if (sectionName) {
+            // Replace everything matched with [Prefix] (first letter capitalized)
+            t = t.replace(match[0], `[${prefix.charAt(0).toUpperCase() + prefix.slice(1)}] `);
+        }
     }
+
     return t;
 }
 
