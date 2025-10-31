@@ -43,21 +43,22 @@ const PREFIX_MAP = {
     discussion: "💡 Ideas & Proposals",
 };
 
-// --- Helper to capitalize prefix cleanly ---
-function capitalizePrefix(prefix) {
-    return prefix
-        .toLowerCase()
-        .split("/")
-        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-        .join("/");
-}
-
-// --- Extract and normalize all prefixes in title (merged into one [..] if multiple) ---
-function extractAndNormalizePrefixes(title) {
+// --- Normalize multiple prefixes to official casing ---
+function normalizePrefixesToOfficial(title) {
     const matches = [...title.matchAll(/\[([^\]]+)\]/g)];
     if (matches.length) {
         const combined = matches
-            .map(m => m[1].split(',').map(p => p.trim()).filter(Boolean).map(capitalizePrefix))
+            .map(m => m[1].split(',').map(p => p.trim().toLowerCase()).filter(Boolean)
+                .map(p => {
+                    if (p === "ux/ui") return "UX/UI";
+                    if (PREFIX_MAP[p]) {
+                        // extract just prefix text without emoji
+                        const text = PREFIX_MAP[p].replace(/^[^\s]+\s/, "");
+                        return text.split(" ")[0];
+                    }
+                    return p.charAt(0).toUpperCase() + p.slice(1);
+                })
+            )
             .flat();
         return {
             prefix: `[${combined.join(', ')}]`,
@@ -65,11 +66,13 @@ function extractAndNormalizePrefixes(title) {
         };
     }
 
+    // Handle single-word prefix like "chore:" or "feat:"
     const singleMatch = title.match(
         /^([^\w]*)(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui|proposal|idea|discussion)[:\-\s]/i
     );
     if (singleMatch) {
-        const normalized = capitalizePrefix(singleMatch[2]);
+        const p = singleMatch[2].toLowerCase();
+        const normalized = p === "ux/ui" ? "UX/UI" : p.charAt(0).toUpperCase() + p.slice(1);
         return { prefix: `[${normalized}]`, cleanTitle: title.replace(singleMatch[0], '').trim() };
     }
 
@@ -78,16 +81,14 @@ function extractAndNormalizePrefixes(title) {
 
 // --- Normalize title ---
 function normalizeTitlePrefixes(title) {
-    const { prefix, cleanTitle } = extractAndNormalizePrefixes(title);
+    const { prefix, cleanTitle } = normalizePrefixesToOfficial(title);
     return prefix ? `${prefix} ${cleanTitle}` : cleanTitle;
 }
 
 // --- Classify title ---
 function classifyTitle(title) {
-    const { prefix } = extractAndNormalizePrefixes(title);
+    const { prefix } = normalizePrefixesToOfficial(title);
     if (!prefix) return "Other";
-
-    // Берём первый префикс для классификации
     const firstPrefix = prefix.split(',')[0].replace(/[\[\]]/g, '').toLowerCase();
     return PREFIX_MAP[firstPrefix] || "Other";
 }
@@ -153,6 +154,7 @@ function nextVersion(lastTag) {
 
 // --- Main function ---
 async function main() {
+    // Get last non-draft release
     let lastRelease = null;
     try {
         const { data } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 20 });
@@ -164,7 +166,7 @@ async function main() {
     const lastTag = lastRelease?.tag_name || null;
     const newTag = nextVersion(lastTag);
 
-    // 2️⃣ Target branch
+    // Determine target branch
     const branches = await octokit.repos.listBranches({ owner: OWNER, repo: REPO });
     const branchNames = branches.data.map(b => b.name);
     let targetBranch = MASTER_BRANCH;
@@ -237,6 +239,7 @@ async function main() {
 
     console.log(releaseNotesText);
 
+    // Update or create draft release
     let draftRelease = null;
     try {
         const { data: releases } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 10 });
