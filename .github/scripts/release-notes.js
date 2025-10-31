@@ -139,8 +139,15 @@ async function main() {
     // 1️⃣ Latest release
     let lastRelease = null;
     try {
-        const { data } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 1 });
-        lastRelease = data[0] || null;
+        // Get last non-draft release
+        let releasesData = [];
+        try {
+            const { data } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 20 });
+            releasesData = data;
+        } catch {}
+
+        const publishedReleases = releasesData.filter(r => !r.draft);
+        lastRelease = publishedReleases.length ? publishedReleases[0] : null;
     } catch {}
 
     const since = lastRelease ? new Date(lastRelease.created_at) : null;
