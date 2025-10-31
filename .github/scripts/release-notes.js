@@ -77,30 +77,51 @@ async function getLinkedIssues(prNumber) {
 
 // --- Classify title by flexible prefix ---
 function classifyTitle(title) {
-    // remove leading emoji and spaces
-    const cleaned = title.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, '');
+    // Remove emojis and spaces at start
+    const cleaned = title.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, "");
+
+    // Match [Feat], Feat:, Feat - etc.
     const match = cleaned.match(/^\s*(?:\[([^\]]+)\]|([^\s:]+))\s*:?\s*/i);
-    const rawPrefix = match ? (match[1] || match[2]) : null;
+    if (!match) return "Other";
+
+    // If multiple prefixes inside [Feat, Enhancement] — split and take first
+    let rawPrefix = (match[1] || match[2])?.split(",")[0].trim() || null;
     if (!rawPrefix) return "Other";
 
     const prefix = rawPrefix.toLowerCase();
     const map = {
-        "task": "🚀 Tasks",
-        "composite": "🚀 Tasks",
+        task: "🚀 Tasks",
+        composite: "🚀 Tasks",
         "ux/ui": "🔧 Enhancements",
-        "enhancement": "🔧 Enhancements",
-        "bug": "🐞 Bug Fixes",
-        "feat": "✨ New Features",
-        "refactor": "🛠 Refactoring",
-        "docs": "📚 Documentation",
-        "test": "✅ Tests",
-        "chore": "⚙️ Chores",
-        "proposal": "💡 Ideas & Proposals",
-        "idea": "💡 Ideas & Proposals",
-        "discussion": "💡 Ideas & Proposals",
+        enhancement: "🔧 Enhancements",
+        bug: "🐞 Bug Fixes",
+        feat: "✨ New Features",
+        feature: "✨ New Features",
+        refactor: "🛠 Refactoring",
+        docs: "📚 Documentation",
+        doc: "📚 Documentation",
+        test: "✅ Tests",
+        chore: "⚙️ Chores",
+        proposal: "💡 Ideas & Proposals",
+        idea: "💡 Ideas & Proposals",
+        discussion: "💡 Ideas & Proposals",
     };
 
     return map[prefix] || "Other";
+}
+
+// --- Normalize prefix style in titles ---
+function normalizeTitlePrefixes(title) {
+    return title.replace(/^\s*(?:\[([^\]]+)\]|([^\s:]+))\s*:?\s*/i, (match, p1, p2) => {
+        const prefixText = p1 || p2;
+        if (!prefixText) return match;
+        // Preserve multiple prefixes, capitalize each, wrap in [ ]
+        const formatted = prefixText
+            .split(",")
+            .map(p => `[${p.trim().charAt(0).toUpperCase() + p.trim().slice(1).toLowerCase()}]`)
+            .join(" ");
+        return `${formatted} `;
+    });
 }
 
 // --- Semantic versioning ---
@@ -108,8 +129,7 @@ function nextVersion(lastTag) {
     if (!lastTag) return "v0.1.0";
     const match = lastTag.match(/^v(\d+)\.(\d+)\.(\d+)/);
     if (!match) return "v0.1.0";
-
-    let [_, major, minor, patch] = match.map(Number);
+    let [, major, minor, patch] = match.map(Number);
     patch += 1;
     return `v${major}.${minor}.${patch}`;
 }
@@ -163,7 +183,7 @@ async function main() {
         }
     }
 
-    // 5️⃣ Classify
+    // 5️⃣ Classify and build sections
     const sections = {
         "🚀 Tasks": [],
         "🔧 Enhancements": [],
@@ -179,17 +199,15 @@ async function main() {
 
     for (const [num, info] of Object.entries(issueMap)) {
         const section = classifyTitle(info.title);
-        sections[section].push(
-            `#${num} ${info.title} ↳ PRs: ${info.prs
-                .sort((a, b) => a - b) // сортировка по возрастанию
-                .map(n => `#${n}`)
-                .join(", ")}`
-        );
+        const title = normalizeTitlePrefixes(info.title);
+        const prsText = info.prs.sort((a, b) => a - b).map(n => `#${n}`).join(", ");
+        sections[section].push(`#${num} ${title}\n↳ PRs: ${prsText}`);
     }
 
     for (const pr of prsWithoutIssue) {
         const section = classifyTitle(pr.title);
-        sections[section].push(`#${pr.number} ${pr.title}`);
+        const title = normalizeTitlePrefixes(pr.title);
+        sections[section].push(`#${pr.number} ${title}`);
     }
 
     // 6️⃣ Build release notes text
@@ -203,7 +221,8 @@ async function main() {
     }
 
     console.log(releaseNotesText);
-    // --- Find or create draft release ---
+
+    // 7️⃣ Find or create draft release
     let draftRelease = null;
     try {
         const { data: releases } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 10 });
@@ -211,7 +230,6 @@ async function main() {
     } catch {}
 
     if (draftRelease) {
-        // Update existing draft
         await octokit.repos.updateRelease({
             owner: OWNER,
             repo: REPO,
@@ -221,7 +239,6 @@ async function main() {
         });
         console.log(`✅ Draft release updated: ${draftRelease.tag_name}`);
     } else {
-        // Create new draft
         await octokit.repos.createRelease({
             owner: OWNER,
             repo: REPO,
@@ -234,7 +251,7 @@ async function main() {
         console.log(`✅ Draft release created: ${newTag}`);
     }
 
-    console.log(`✅ Release created: ${newTag}`);
+    console.log(`✅ Release processing completed`);
 }
 
 // --- Run ---
