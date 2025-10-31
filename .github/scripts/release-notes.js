@@ -43,12 +43,12 @@ const PREFIX_MAP = {
     "discussion": "💡 Ideas & Proposals",
 };
 
-// --- Remove leading emojis (Unicode + :emoji:) ---
+// --- Strip leading emojis ---
 function stripLeadingEmoji(title) {
     let t = title.trim();
     // Remove :emoji: at start
     t = t.replace(/^(:[a-zA-Z0-9_+-]+:)+\s*/g, '');
-    // Remove actual Unicode emojis
+    // Remove Unicode emojis
     t = t.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, '');
     return t.trim();
 }
@@ -75,19 +75,21 @@ function classifyTitle(title) {
 }
 
 // --- Normalize title for release notes ---
-// Convert emoji + chore: → [Chore], feat: → [Feat], etc.
 function normalizeTitleForNotes(title) {
     let t = title.trim();
 
+    // Remove leading emoji or :emoji:
     t = t.replace(/^([\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+|(:[a-zA-Z0-9_+-]+:)+)\s*/u, '');
 
+    // Bracket prefix [Feat, Enhancement] → [Feat]
     const bracketMatch = t.match(/^\[([^\]]+)\]/);
     if (bracketMatch) {
         const firstPrefix = bracketMatch[1].split(',')[0].trim();
-        t = `[${firstPrefix}]` + t.slice(bracketMatch[0].length);
+        t = `[${firstPrefix}]` + t.slice(bracketMatch[0].length).trimStart();
         return t;
     }
 
+    // Single-word prefix like chore:, feat:, etc.
     const simpleMatch = t.match(/^(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
     if (simpleMatch) {
         const prefix = simpleMatch[1].toLowerCase();
@@ -159,7 +161,7 @@ function nextVersion(lastTag) {
 
 // --- Main ---
 async function main() {
-    // Latest non-draft release
+    // 1️⃣ Latest non-draft release
     let lastRelease = null;
     try {
         const { data } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 20 });
@@ -171,7 +173,7 @@ async function main() {
     const lastTag = lastRelease?.tag_name || null;
     const newTag = nextVersion(lastTag);
 
-    // Determine target branch
+    // 2️⃣ Determine target branch
     const branches = await octokit.repos.listBranches({ owner: OWNER, repo: REPO });
     const branchNames = branches.data.map(b => b.name);
     let targetBranch = MASTER_BRANCH;
@@ -187,11 +189,11 @@ async function main() {
         } catch {}
     }
 
-    // Fetch merged PRs
+    // 3️⃣ Fetch merged PRs
     const prs = await getAllPRs({ owner: OWNER, repo: REPO, base: targetBranch });
     const mergedPRs = prs.filter(pr => pr.merged_at && (!since || new Date(pr.merged_at) > since));
 
-    // Build issue → PR map
+    // 4️⃣ Build issue → PR map
     const issueMap = {};
     const prsWithoutIssue = [];
 
@@ -207,7 +209,7 @@ async function main() {
         }
     }
 
-    // Build sections
+    // 5️⃣ Build sections
     const sections = {
         "🚀 Tasks": [],
         "🔧 Enhancements": [],
@@ -223,8 +225,8 @@ async function main() {
 
     // PRs linked to issues
     for (const [num, info] of Object.entries(issueMap)) {
-        const section = classifyTitle(info.title);
-        const title = info.title; // keep original with all prefixes
+        const title = normalizeTitleForNotes(info.title);
+        const section = classifyTitle(title);
         const prsText = info.prs.sort((a, b) => a - b).map(n => `#${n}`).join(", ");
         sections[section].push(`#${num} ${title}\n↳ PRs: ${prsText}`);
     }
@@ -236,7 +238,7 @@ async function main() {
         sections[section].push(`#${pr.number} ${title}`);
     }
 
-    // Build release notes
+    // 6️⃣ Build release notes text
     let releaseNotesText = `## Draft Release Notes\n\n`;
     for (const [sectionName, items] of Object.entries(sections)) {
         if (!items.length) continue;
@@ -248,7 +250,7 @@ async function main() {
 
     console.log(releaseNotesText);
 
-    // Find or create draft release
+    // 7️⃣ Find or create draft release
     let draftRelease = null;
     try {
         const { data: releases } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 10 });
