@@ -65,7 +65,7 @@ function classifyTitle(title) {
     }
 
     // Single-word prefix like chore:, feat:
-    match = t.match(/^(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui|proposal|idea|discussion)[:\s-]+/i);
+    match = t.match(/^(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
     if (match) {
         const prefix = match[1].toLowerCase();
         return PREFIX_MAP[prefix] || "Other";
@@ -74,19 +74,19 @@ function classifyTitle(title) {
     return "Other";
 }
 
-// --- Normalize title for display (keep all prefixes in brackets as-is) ---
+// --- Normalize title for release notes ---
+// Convert emoji + chore: → [Chore], feat: → [Feat], etc.
 function normalizeTitleForNotes(title) {
     let t = title.trim();
 
-    // Match leading emoji + optional :emoji: + optional text prefix like chore:, feat:, etc.
-    const match = t.match(/^([\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+|(:[a-zA-Z0-9_+-]+:)+)\s*(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
+    // Remove leading emoji or :emoji: (one or more)
+    t = t.replace(/^([\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+|(:[a-zA-Z0-9_+-]+:)+)\s*/u, '');
+
+    // Match leading word prefix like chore:, feat:, etc.
+    const match = t.match(/^(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
     if (match) {
-        const prefix = match[3].toLowerCase();
-        const sectionName = PREFIX_MAP[prefix];
-        if (sectionName) {
-            // Replace everything matched with [Prefix] (first letter capitalized)
-            t = t.replace(match[0], `[${prefix.charAt(0).toUpperCase() + prefix.slice(1)}] `);
-        }
+        const prefix = match[1].toLowerCase();
+        t = t.replace(match[0], `[${prefix.charAt(0).toUpperCase() + prefix.slice(1)}] `);
     }
 
     return t;
@@ -274,7 +274,7 @@ async function main() {
     console.log(`✅ Release processing completed`);
 }
 
-// --- Run ---
+// Run
 main().catch(err => {
     console.error("Error:", err);
     process.exit(1);
