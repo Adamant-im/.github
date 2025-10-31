@@ -94,19 +94,17 @@ async function getLinkedIssues(prNumber) {
 
 // --- Classify title by first prefix ---
 function classifyTitle(title) {
-    let t = title.trim();
+    // 1️⃣ Remove leading emojis and spaces
+    let t = title.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, '').trim();
 
-    // Remove leading emojis and spaces
-    t = t.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, '').trim();
-
-    // 1️⃣ Bracket prefix [Feat], [Feat, UX/UI], etc.
-    let match = t.match(/\[([^\]]+)\]/);
+    // 2️⃣ Bracket prefix [Feat], [Feat, UX/UI], etc.
+    let match = t.match(/^\[([^\]]+)\]/);
     if (match) {
         const firstPrefix = match[1].split(',')[0].trim().toLowerCase();
         return PREFIX_MAP[firstPrefix] || "Other";
     }
 
-    // 2️⃣ Single-word prefix like chore:, feat:
+    // 3️⃣ Single-word prefix like chore:, feat:
     match = t.match(/^(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui|proposal|idea|discussion)[:\s-]+/i);
     if (match) {
         const prefix = match[1].toLowerCase();
@@ -116,12 +114,11 @@ function classifyTitle(title) {
     return "Other";
 }
 
-
-// --- Normalize title prefixes (for display) ---
+// --- Normalize title prefixes for display ---
 function normalizeTitleForNotes(title) {
     let t = title.trim();
 
-    // Convert single-word prefixes to [Title] style, keep bracketed titles as-is
+    // Convert single-word prefixes to [Title] style if no brackets, keep bracketed titles as-is
     const match = t.match(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]*\s*(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui|proposal|idea|discussion)[:\s-]+/i);
     if (match) {
         const prefix = match[1];
