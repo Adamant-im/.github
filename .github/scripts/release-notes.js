@@ -82,15 +82,27 @@ function normalizeTitleForNotes(title) {
     // Remove leading emoji or :emoji: (one or more)
     t = t.replace(/^([\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+|(:[a-zA-Z0-9_+-]+:)+)\s*/u, '');
 
-    // Match leading word prefix like chore:, feat:, etc.
-    const match = t.match(/^(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
+    // Match bracket prefix like [Feat, Enhancement]
+    const match = t.match(/^\[([^\]]+)\]/);
     if (match) {
-        const prefix = match[1].toLowerCase();
-        t = t.replace(match[0], `[${prefix.charAt(0).toUpperCase() + prefix.slice(1)}] `);
+        // Take only the first prefix
+        const firstPrefix = match[1].split(',')[0].trim();
+        // Keep the rest of the title unchanged
+        t = `[${firstPrefix}]` + t.slice(match[0].length);
+        return t;
+    }
+
+    // Match single-word prefix like chore:, feat:, etc.
+    const match2 = t.match(/^(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
+    if (match2) {
+        const prefix = match2[1].toLowerCase();
+        t = t.replace(match2[0], `[${prefix.charAt(0).toUpperCase() + prefix.slice(1)}] `);
     }
 
     return t;
 }
+
+
 
 // --- Fetch all closed PRs ---
 async function getAllPRs({ owner, repo, base }) {
