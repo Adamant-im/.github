@@ -94,7 +94,10 @@ async function getLinkedIssues(prNumber) {
 
 // --- Classify title by first prefix ---
 function classifyTitle(title) {
-    const t = title.trim();
+    let t = title.trim();
+
+    // Remove leading emojis and spaces
+    t = t.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, '').trim();
 
     // 1️⃣ Bracket prefix [Feat], [Feat, UX/UI], etc.
     let match = t.match(/\[([^\]]+)\]/);
@@ -103,16 +106,16 @@ function classifyTitle(title) {
         return PREFIX_MAP[firstPrefix] || "Other";
     }
 
-    // 2️⃣ Single-word prefix like chore:, feat:, 🎨 chore:
-    match = t.match(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]*\s*(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui|proposal|idea|discussion)[:\s-]+/i);
+    // 2️⃣ Single-word prefix like chore:, feat:
+    match = t.match(/^(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui|proposal|idea|discussion)[:\s-]+/i);
     if (match) {
         const prefix = match[1].toLowerCase();
         return PREFIX_MAP[prefix] || "Other";
     }
 
-    // 3️⃣ Fallback
     return "Other";
 }
+
 
 // --- Normalize title prefixes (for display) ---
 function normalizeTitleForNotes(title) {
