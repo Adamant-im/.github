@@ -75,53 +75,50 @@ async function getLinkedIssues(prNumber) {
     }
 }
 
-// --- Classify title by flexible prefix ---
+// --- Determine section from prefix ---
 function classifyTitle(title) {
-    // Remove emojis and spaces at start
-    const cleaned = title.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, "");
-
-    // Match [Feat], Feat:, Feat - etc.
-    const match = cleaned.match(/^\s*(?:\[([^\]]+)\]|([^\s:]+))\s*:?\s*/i);
+    const cleaned = title.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, "").trim();
+    const match = cleaned.match(/^\s*\[([^\]]+)\]|^\s*([^\s:]+)\s*:?\s*/i);
     if (!match) return "Other";
 
-    // If multiple prefixes inside [Feat, Enhancement] — split and take first
-    let rawPrefix = (match[1] || match[2])?.split(",")[0].trim() || null;
-    if (!rawPrefix) return "Other";
+    const rawPrefix = (match[1] || match[2] || "").split(",")[0].trim().toLowerCase();
 
-    const prefix = rawPrefix.toLowerCase();
     const map = {
-        task: "🚀 Tasks",
-        composite: "🚀 Tasks",
+        "task": "🚀 Tasks",
+        "composite": "🚀 Tasks",
         "ux/ui": "🔧 Enhancements",
-        enhancement: "🔧 Enhancements",
-        bug: "🐞 Bug Fixes",
-        feat: "✨ New Features",
-        feature: "✨ New Features",
-        refactor: "🛠 Refactoring",
-        docs: "📚 Documentation",
-        doc: "📚 Documentation",
-        test: "✅ Tests",
-        chore: "⚙️ Chores",
-        proposal: "💡 Ideas & Proposals",
-        idea: "💡 Ideas & Proposals",
-        discussion: "💡 Ideas & Proposals",
+        "enhancement": "🔧 Enhancements",
+        "bug": "🐞 Bug Fixes",
+        "feat": "✨ New Features",
+        "refactor": "🛠 Refactoring",
+        "docs": "📚 Documentation",
+        "test": "✅ Tests",
+        "chore": "⚙️ Chores",
+        "proposal": "💡 Ideas & Proposals",
+        "idea": "💡 Ideas & Proposals",
+        "discussion": "💡 Ideas & Proposals",
     };
 
-    return map[prefix] || "Other";
+    return map[rawPrefix] || "Other";
 }
 
-// --- Normalize prefix style in titles ---
+// --- Normalize title, preserving multiple prefixes ---
 function normalizeTitlePrefixes(title) {
-    return title.replace(/^\s*(?:\[([^\]]+)\]|([^\s:]+))\s*:?\s*/i, (match, p1, p2) => {
-        const prefixText = p1 || p2;
-        if (!prefixText) return match;
-        // Preserve multiple prefixes, capitalize each, wrap in [ ]
-        const formatted = prefixText
+    let cleaned = title.trim();
+
+    // Extract prefix part if exists
+    const match = cleaned.match(/^\s*(?:\[([^\]]+)\]|([^\s:]+))\s*:?\s*/i);
+    if (match) {
+        let prefixText = match[1] || match[2] || "";
+        // Keep multiple prefixes intact (e.g. "Feat, UX/UI")
+        const formatted = `[${prefixText
             .split(",")
-            .map(p => `[${p.trim().charAt(0).toUpperCase() + p.trim().slice(1).toLowerCase()}]`)
-            .join(" ");
-        return `${formatted} `;
-    });
+            .map(p => p.trim().replace(/^[\[\]]+/g, "").replace(/^([a-z])/, (_, c) => c.toUpperCase()))
+            .join(", ")}]`;
+        cleaned = cleaned.replace(match[0], `${formatted} `);
+    }
+
+    return cleaned;
 }
 
 // --- Semantic versioning ---
@@ -134,20 +131,14 @@ function nextVersion(lastTag) {
     return `v${major}.${minor}.${patch}`;
 }
 
-// --- Main function ---
+// --- Main ---
 async function main() {
-    // 1️⃣ Latest release
+    // 1️⃣ Get last release
     let lastRelease = null;
     try {
-        // Get last non-draft release
-        let releasesData = [];
-        try {
-            const { data } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 20 });
-            releasesData = data;
-        } catch {}
-
-        const publishedReleases = releasesData.filter(r => !r.draft);
-        lastRelease = publishedReleases.length ? publishedReleases[0] : null;
+        const { data } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 20 });
+        const published = data.filter(r => !r.draft);
+        lastRelease = published.length ? published[0] : null;
     } catch {}
 
     const since = lastRelease ? new Date(lastRelease.created_at) : null;
@@ -170,7 +161,7 @@ async function main() {
         } catch {}
     }
 
-    // 3️⃣ Fetch merged PRs
+    // 3️⃣ Merged PRs since last release
     const prs = await getAllPRs({ owner: OWNER, repo: REPO, base: targetBranch });
     const mergedPRs = prs.filter(pr => pr.merged_at && (!since || new Date(pr.merged_at) > since));
 
@@ -190,7 +181,7 @@ async function main() {
         }
     }
 
-    // 5️⃣ Classify and build sections
+    // 5️⃣ Group by section
     const sections = {
         "🚀 Tasks": [],
         "🔧 Enhancements": [],
@@ -217,19 +208,19 @@ async function main() {
         sections[section].push(`#${pr.number} ${title}`);
     }
 
-    // 6️⃣ Build release notes text
+    // 6️⃣ Build release notes
     let releaseNotesText = `## Draft Release Notes\n\n`;
     for (const [sectionName, items] of Object.entries(sections)) {
         if (!items.length) continue;
         items.sort((a, b) => parseInt(a.match(/#(\d+)/)[1]) - parseInt(b.match(/#(\d+)/)[1]));
         releaseNotesText += `### ${sectionName}\n`;
-        items.forEach(i => releaseNotesText += `- ${i}\n`);
+        items.forEach(i => (releaseNotesText += `- ${i}\n`));
         releaseNotesText += `\n`;
     }
 
     console.log(releaseNotesText);
 
-    // 7️⃣ Find or create draft release
+    // 7️⃣ Update or create draft release
     let draftRelease = null;
     try {
         const { data: releases } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 10 });
@@ -258,10 +249,9 @@ async function main() {
         console.log(`✅ Draft release created: ${newTag}`);
     }
 
-    console.log(`✅ Release processing completed`);
+    console.log("✅ Release processing completed");
 }
 
-// --- Run ---
 main().catch(err => {
     console.error("Error:", err);
     process.exit(1);
