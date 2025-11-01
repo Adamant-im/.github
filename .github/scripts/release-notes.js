@@ -33,6 +33,7 @@ const PREFIX_MAP = {
     "ux/ui": "🔧 Enhancements",
     "enhancement": "🔧 Enhancements",
     "bug": "🐞 Bug Fixes",
+    "fix": "🐞 Bug Fixes",
     "feat": "✨ New Features",
     "refactor": "🛠 Refactoring",
     "docs": "📚 Documentation",
@@ -46,10 +47,8 @@ const PREFIX_MAP = {
 // --- Strip leading emojis ---
 function stripLeadingEmoji(title) {
     let t = title.trim();
-    // Remove :emoji: at start
-    t = t.replace(/^(:[a-zA-Z0-9_+-]+:)+\s*/g, '');
-    // Remove Unicode emojis
-    t = t.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, '');
+    t = t.replace(/^(:[a-zA-Z0-9_+-]+:)+\s*/g, ''); // :emoji:
+    t = t.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, ''); // Unicode emoji
     return t.trim();
 }
 
@@ -57,15 +56,13 @@ function stripLeadingEmoji(title) {
 function classifyTitle(title) {
     const t = stripLeadingEmoji(title);
 
-    // Bracket prefix [Feat], [Feat, UX/UI], etc.
     let match = t.match(/^\[([^\]]+)\]/);
     if (match) {
         const firstPrefix = match[1].split(',')[0].trim().toLowerCase();
         return PREFIX_MAP[firstPrefix] || "Other";
     }
 
-    // Single-word prefix like chore:, feat:
-    match = t.match(/^(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
+    match = t.match(/^(bug|fix|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
     if (match) {
         const prefix = match[1].toLowerCase();
         return PREFIX_MAP[prefix] || "Other";
@@ -85,12 +82,12 @@ function normalizeTitleForNotes(title) {
     const bracketMatch = t.match(/^\[([^\]]+)\]/);
     if (bracketMatch) {
         const firstPrefix = bracketMatch[1].split(',')[0].trim();
-        t = `[${firstPrefix}]` + t.slice(bracketMatch[0].length).trimStart();
+        t = `[${firstPrefix}] ` + t.slice(bracketMatch[0].length).trimStart();
         return t;
     }
 
-    // Single-word prefix like chore:, feat:, etc.
-    const simpleMatch = t.match(/^(bug|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
+    // Single-word prefix like chore:, feat:, fix:, etc.
+    const simpleMatch = t.match(/^(bug|fix|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
     if (simpleMatch) {
         const prefix = simpleMatch[1].toLowerCase();
         t = t.replace(simpleMatch[0], `[${prefix.charAt(0).toUpperCase() + prefix.slice(1)}] `);
@@ -161,7 +158,6 @@ function nextVersion(lastTag) {
 
 // --- Main ---
 async function main() {
-    // 1️⃣ Latest non-draft release
     let lastRelease = null;
     try {
         const { data } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 20 });
@@ -173,7 +169,6 @@ async function main() {
     const lastTag = lastRelease?.tag_name || null;
     const newTag = nextVersion(lastTag);
 
-    // 2️⃣ Determine target branch
     const branches = await octokit.repos.listBranches({ owner: OWNER, repo: REPO });
     const branchNames = branches.data.map(b => b.name);
     let targetBranch = MASTER_BRANCH;
@@ -189,11 +184,9 @@ async function main() {
         } catch {}
     }
 
-    // 3️⃣ Fetch merged PRs
     const prs = await getAllPRs({ owner: OWNER, repo: REPO, base: targetBranch });
     const mergedPRs = prs.filter(pr => pr.merged_at && (!since || new Date(pr.merged_at) > since));
 
-    // 4️⃣ Build issue → PR map
     const issueMap = {};
     const prsWithoutIssue = [];
 
@@ -202,14 +195,13 @@ async function main() {
         if (linkedIssues.length) {
             for (const issue of linkedIssues) {
                 if (!issueMap[issue.number]) issueMap[issue.number] = { title: issue.title, prs: [] };
-                issueMap[issue.number].prs.push(pr.number);
+                issueMap[issue.number].prs.push({ number: pr.number, user: pr.user?.login });
             }
         } else {
             prsWithoutIssue.push(pr);
         }
     }
 
-    // 5️⃣ Build sections
     const sections = {
         "🚀 Tasks": [],
         "🔧 Enhancements": [],
@@ -223,11 +215,14 @@ async function main() {
         Other: [],
     };
 
-    // PRs linked to issues
+    // Issues
     for (const [num, info] of Object.entries(issueMap)) {
         const title = normalizeTitleForNotes(info.title);
         const section = classifyTitle(title);
-        const prsText = info.prs.sort((a, b) => a - b).map(n => `#${n}`).join(", ");
+        const prsText = info.prs
+            .sort((a, b) => a.number - b.number)
+            .map(p => `#${p.number} by @${p.user}`)
+            .join(", ");
         sections[section].push(`#${num} ${title}\n↳ PRs: ${prsText}`);
     }
 
@@ -235,10 +230,9 @@ async function main() {
     for (const pr of prsWithoutIssue) {
         const title = normalizeTitleForNotes(pr.title);
         const section = classifyTitle(title);
-        sections[section].push(`#${pr.number} ${title}`);
+        sections[section].push(`#${pr.number} ${title} by @${pr.user?.login}`);
     }
 
-    // 6️⃣ Build release notes text
     let releaseNotesText = `## Draft Release Notes\n\n`;
     for (const [sectionName, items] of Object.entries(sections)) {
         if (!items.length) continue;
@@ -250,7 +244,6 @@ async function main() {
 
     console.log(releaseNotesText);
 
-    // 7️⃣ Find or create draft release
     let draftRelease = null;
     try {
         const { data: releases } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 10 });
