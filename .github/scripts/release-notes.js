@@ -1,168 +1,278 @@
 import { Octokit } from "@octokit/rest";
+import { graphql } from "@octokit/graphql";
+import { execSync } from "child_process";
 
-const token = process.env.GITHUB_TOKEN;
-const repoFull = process.env.GITHUB_REPOSITORY;
-const [owner, repo] = repoFull.split("/");
-
-if (!token || !repoFull) {
-    console.error("GITHUB_TOKEN and GITHUB_REPOSITORY must be set");
-    process.exit(1);
+function detectRepo() {
+    if (process.env.GITHUB_REPOSITORY) {
+        const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
+        return { owner, repo };
+    }
+    try {
+        const remoteUrl = execSync("git config --get remote.origin.url").toString().trim();
+        const match = remoteUrl.match(/[:/]([^/]+)\/([^/]+)(?:\.git)?$/);
+        if (match) return { owner: match[1], repo: match[2] };
+    } catch {}
+    throw new Error("❌ Repository could not be detected.");
 }
 
-const octokit = new Octokit({ auth: token });
+const DEV_BRANCH = "dev";
+const MASTER_BRANCH = "master";
+const { owner: OWNER, repo: REPO } = detectRepo();
 
-const SECTIONS = {
-    "[Task]": "🚀 Tasks",
-    "[Composite]": "🚀 Tasks",
-    "[Feat]": "✨ New Features",
-    "[Enhancement]": "🔧 Enhancements",
-    "[UX/UI]": "🔧 Enhancements",
-    "[Bug]": "🐞 Bug Fixes",
-    "[Refactor]": "♻️ Refactoring",
-    "[Docs]": "📚 Documentation",
-    "[Test]": "🧪 Tests",
-    "[Chore]": "🧹 Chores",
-    Other: "📦 Other",
-};
-
-const PREFIXES = ["Task", "Composite", "Feat", "Enhancement", "UX/UI", "Bug", "Refactor", "Docs", "Test", "Chore"];
-
-const PREFIX_ALIASES = {};
-PREFIXES.forEach(p => {
-    const norm = `[${p}]`;
-    const lower = p.toLowerCase();
-
-    PREFIX_ALIASES[`[${lower}]`] = norm;
-    PREFIX_ALIASES[lower] = norm;
-    PREFIX_ALIASES[`${lower}:`] = norm;
-    PREFIX_ALIASES[p] = norm;
-    PREFIX_ALIASES[`${p}:`] = norm;
+const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+const graphqlWithAuth = graphql.defaults({
+    headers: { authorization: `token ${process.env.GITHUB_TOKEN}` },
 });
 
-function stripPrefix(title) {
-    return title.replace(/^\[[^\]]+\]\s*/, "").replace(/^[a-z]+:\s*/i, "").trim();
+const PREFIX_MAP = {
+    "task": "🚀 Tasks",
+    "composite": "🚀 Tasks",
+    "bug": "🐞 Bug Fixes",
+    "fix": "🐞 Bug Fixes",
+    "refactor": "🛠 Refactoring",
+    "docs": "📚 Documentation",
+    "test": "✅ Tests",
+    "chore": "⚙️ Chores",
+    "proposal": "💡 Ideas & Proposals",
+    "idea": "💡 Ideas & Proposals",
+    "discussion": "💡 Ideas & Proposals",
+    "feat": "✨ New features & Enhancements",
+    "enhancement": "✨ New features & Enhancements",
+    "ux/ui": "✨ New features & Enhancements",
+};
+
+function stripLeadingEmoji(title) {
+    let t = title.trim();
+    t = t.replace(/^(:[a-zA-Z0-9_+-]+:)+\s*/g, ''); // :emoji:
+    t = t.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/u, ''); // Unicode emoji
+    return t.trim();
 }
 
-function getPrefix(title) {
-    if (!title) return null;
-    const matchBracket = title.match(/^\[([^\]]+)\]/);
-    if (matchBracket) {
-        const norm = PREFIX_ALIASES[`[${matchBracket[1].toLowerCase()}]`];
-        if (norm) return norm;
+function classifyTitle(title) {
+    const t = stripLeadingEmoji(title);
+
+    let match = t.match(/^\[([^\]]+)\]/);
+    if (match) {
+        const firstPrefix = match[1].split(',')[0].trim().toLowerCase();
+        return PREFIX_MAP[firstPrefix] || "Other";
     }
-    const matchWord = title.match(/^([a-z/]+):?/i);
-    if (matchWord) {
-        const norm = PREFIX_ALIASES[matchWord[1].toLowerCase()];
-        if (norm) return norm;
+
+    match = t.match(/^(bug|fix|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
+    if (match) {
+        const prefix = match[1].toLowerCase();
+        return PREFIX_MAP[prefix] || "Other";
     }
-    return null;
+
+    return "Other";
+}
+
+function normalizeTitleForNotes(title) {
+    let t = title.trim();
+
+    t = t.replace(/^([\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+|(:[a-zA-Z0-9_+-]+:)+)\s*/u, '');
+
+    const bracketMatch = t.match(/^\[([^\]]+)\]/);
+    if (bracketMatch) {
+        const firstPrefix = bracketMatch[1].split(',')[0].trim();
+        t = `[${firstPrefix}] ` + t.slice(bracketMatch[0].length).trimStart();
+        return t;
+    }
+
+    const simpleMatch = t.match(/^(bug|fix|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
+    if (simpleMatch) {
+        const prefix = simpleMatch[1].toLowerCase();
+        t = t.replace(simpleMatch[0], `[${prefix.charAt(0).toUpperCase() + prefix.slice(1)}] `);
+        return t;
+    }
+
+    return t;
+}
+
+async function getAllPRs({ owner, repo, base }) {
+    const perPage = 100;
+    let page = 1;
+    let all = [];
+    while (true) {
+        const { data } = await octokit.pulls.list({
+            owner,
+            repo,
+            state: "closed",
+            base,
+            per_page: perPage,
+            page,
+        });
+        if (!data.length) break;
+        all = all.concat(data);
+        if (data.length < perPage) break;
+        page++;
+    }
+    return all;
+}
+
+async function getLinkedIssues(prNumber) {
+    const query = `
+    query ($owner: String!, $repo: String!, $number: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number) {
+          closingIssuesReferences(first: 10) {
+            nodes {
+              number
+              title
+            }
+          }
+        }
+      }
+    }`;
+    try {
+        const response = await graphqlWithAuth(query, { owner: OWNER, repo: REPO, number: prNumber });
+        return response.repository.pullRequest.closingIssuesReferences.nodes.map(i => ({
+            number: i.number,
+            title: i.title,
+        }));
+    } catch {
+        return [];
+    }
+}
+
+function nextVersion(lastTag) {
+    if (!lastTag) return "v0.1.0";
+    const match = lastTag.match(/^v(\d+)\.(\d+)\.(\d+)/);
+    if (!match) return "v0.1.0";
+    let [, major, minor, patch] = match.map(Number);
+    patch += 1;
+    return `v${major}.${minor}.${patch}`;
 }
 
 async function main() {
-    const { data: prs } = await octokit.pulls.list({
-        owner,
-        repo,
-        state: "closed",
-        per_page: 100,
-    });
+    let lastRelease = null;
+    try {
+        const { data } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 20 });
+        const published = data.filter(r => !r.draft);
+        lastRelease = published.length ? published[0] : null;
+    } catch {}
 
-    const { data: issues } = await octokit.issues.listForRepo({
-        owner,
-        repo,
-        state: "closed",
-        per_page: 100,
-    });
+    const since = lastRelease ? new Date(lastRelease.created_at) : null;
+    const lastTag = lastRelease?.tag_name || null;
+    const newTag = nextVersion(lastTag);
 
-    const issueMap = new Map();
-    for (const issue of issues) issueMap.set(issue.number, { ...issue, prs: [] });
+    const branches = await octokit.repos.listBranches({ owner: OWNER, repo: REPO });
+    const branchNames = branches.data.map(b => b.name);
+    let targetBranch = MASTER_BRANCH;
+    if (branchNames.includes(DEV_BRANCH) && lastRelease) {
+        try {
+            const compare = await octokit.repos.compareCommits({
+                owner: OWNER,
+                repo: REPO,
+                base: lastRelease.tag_name,
+                head: DEV_BRANCH,
+            });
+            if (compare.data.commits.length > 0) targetBranch = DEV_BRANCH;
+        } catch {}
+    }
 
-    for (const pr of prs) {
-        if (!pr.merged_at) continue;
+    const prs = await getAllPRs({ owner: OWNER, repo: REPO, base: targetBranch });
+    const mergedPRs = prs.filter(pr => pr.merged_at && (!since || new Date(pr.merged_at) > since));
 
-        const linkedIssues = (pr.body?.match(/#(\d+)/g) || [])
-            .map(s => parseInt(s.replace("#", ""), 10))
-            .filter(n => issueMap.has(n));
+    const issueMap = {};
+    const prsWithoutIssue = [];
 
+    for (const pr of mergedPRs) {
+        const linkedIssues = await getLinkedIssues(pr.number);
         if (linkedIssues.length) {
-            for (const id of linkedIssues) issueMap.get(id).prs.push(pr);
+            for (const issue of linkedIssues) {
+                if (!issueMap[issue.number]) issueMap[issue.number] = { title: issue.title, prs: [] };
+                issueMap[issue.number].prs.push({ number: pr.number, user: pr.user?.login });
+            }
         } else {
-            issueMap.set(`pr-${pr.number}`, { title: pr.title, prs: [pr], isStandalone: true });
+            prsWithoutIssue.push(pr);
         }
     }
 
-    let body = "# 🚀 Release Notes\n\n";
-    const sectionGroups = {};
-    for (const key of Object.keys(SECTIONS)) sectionGroups[key] = [];
+    const sections = {
+        "✨ New features & Enhancements": [],
+        "🐞 Bug Fixes": [],
+        "🚀 Tasks": [],
+        "🛠 Refactoring": [],
+        "📚 Documentation": [],
+        "✅ Tests": [],
+        "⚙️ Chores": [],
+        "💡 Ideas & Proposals": [],
+        Other: [],
+    };
 
-    for (const issue of issueMap.values()) {
-        if (!issue.prs.length && !issue.isStandalone) continue;
-
-        const title = issue.title || "";
-        const prefix = getPrefix(title) || getPrefix(issue.prs?.[0]?.title || "") || "Other";
-        const section = SECTIONS[prefix] ? prefix : "Other";
-
-        if (issue.isStandalone) {
-            const pr = issue.prs[0];
-            const prLine = section === "Other"
-                ? `• ${pr.title} (#${pr.number}) by @${pr.user.login}`
-                : `• ${prefix} ${stripPrefix(pr.title)} (#${pr.number}) by @${pr.user.login}`;
-            sectionGroups[section].push(prLine);
-        } else {
-            const prRefs = issue.prs.map(pr => `#${pr.number} by @${pr.user.login}`).join(", ");
-            const issueLine = section === "Other"
-                ? `• ${title} (#${issue.number})\n  ↳ PRs: ${prRefs}`
-                : `• ${prefix} ${stripPrefix(title)} (#${issue.number})\n  ↳ PRs: ${prRefs}`;
-            sectionGroups[section].push(issueLine);
-        }
+    for (const [num, info] of Object.entries(issueMap)) {
+        const title = normalizeTitleForNotes(info.title);
+        const section = classifyTitle(title);
+        const prsText = info.prs
+            .sort((a, b) => a.number - b.number)
+            .map(p => `#${p.number} by @${p.user}`)
+            .join(", ");
+        sections[section].push(`#${num} ${title}\n↳ PRs: ${prsText}`);
     }
 
-    const orderedSections = ["[Task]", ...Object.keys(SECTIONS).filter(k => k !== "[Task]" && k !== "Other"), "Other"];
-
-    for (const key of orderedSections) {
-        const items = sectionGroups[key];
-        if (items?.length) {
-            body += `## ${SECTIONS[key]}\n${items.join("\n")}\n\n`;
-        }
+    for (const pr of prsWithoutIssue) {
+        const title = normalizeTitleForNotes(pr.title);
+        const section = classifyTitle(title);
+        sections[section].push(`#${pr.number} ${title} by @${pr.user?.login}`);
     }
 
-    const { data: releases } = await octokit.repos.listReleases({ owner, repo });
-    let draft = releases.find(r => r.draft);
+    let releaseNotesText = `## Draft Release Notes\n\n`;
 
-    let nextVersion = "v0.1.0";
-    const latest = releases.find(r => !r.draft) || releases[0];
-    if (latest) {
-        const match = latest.tag_name.match(/v(\d+)\.(\d+)\.(\d+)/);
-        if (match) {
-            const [_, major, minor, patch] = match.map(Number);
-            nextVersion = `v${major}.${minor}.${patch + 1}`;
-        }
+    // New features & Enhancements — first
+    const orderedSections = [
+        "✨ New features & Enhancements",
+        "🐞 Bug Fixes",
+        "🚀 Tasks",
+        "🛠 Refactoring",
+        "📚 Documentation",
+        "✅ Tests",
+        "⚙️ Chores",
+        "💡 Ideas & Proposals",
+        "Other",
+    ];
+
+    for (const sectionName of orderedSections) {
+        const items = sections[sectionName];
+        if (!items.length) continue;
+        items.sort((a, b) => parseInt(a.match(/#(\d+)/)[1]) - parseInt(b.match(/#(\d+)/)[1]));
+        releaseNotesText += `### ${sectionName}\n`;
+        items.forEach(i => releaseNotesText += `- ${i}\n`);
+        releaseNotesText += `\n`;
     }
 
-    if (draft) {
-        console.log("Updating existing draft release:", draft.tag_name);
+    console.log(releaseNotesText);
+
+    let draftRelease = null;
+    try {
+        const { data: releases } = await octokit.repos.listReleases({ owner: OWNER, repo: REPO, per_page: 10 });
+        draftRelease = releases.find(r => r.draft);
+    } catch {}
+
+    if (draftRelease) {
         await octokit.repos.updateRelease({
-            owner,
-            repo,
-            release_id: draft.id,
-            name: nextVersion,
-            body,
+            owner: OWNER,
+            repo: REPO,
+            release_id: draftRelease.id,
+            body: releaseNotesText,
+            name: `Release ${draftRelease.tag_name}`,
         });
+        console.log(`✅ Draft release updated: ${draftRelease.tag_name}`);
     } else {
-        console.log("Creating new draft release");
         await octokit.repos.createRelease({
-            owner,
-            repo,
-            tag_name: nextVersion,
-            name: nextVersion,
-            body,
+            owner: OWNER,
+            repo: REPO,
+            tag_name: newTag,
+            name: `Release ${newTag}`,
+            body: releaseNotesText,
             draft: true,
         });
+        console.log(`✅ Draft release created: ${newTag}`);
     }
 
-    console.log("✅ Draft release updated successfully");
+    console.log(`✅ Release processing completed`);
 }
 
 main().catch(err => {
-    console.error(err);
+    console.error("Error:", err);
     process.exit(1);
 });
