@@ -2,7 +2,6 @@ import { Octokit } from "@octokit/rest";
 import { graphql } from "@octokit/graphql";
 import { execSync } from "child_process";
 
-// --- Detect repository ---
 function detectRepo() {
     if (process.env.GITHUB_REPOSITORY) {
         const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
@@ -16,7 +15,6 @@ function detectRepo() {
     throw new Error("❌ Repository could not be detected.");
 }
 
-// --- Config ---
 const DEV_BRANCH = "dev";
 const MASTER_BRANCH = "master";
 const { owner: OWNER, repo: REPO } = detectRepo();
@@ -26,15 +24,11 @@ const graphqlWithAuth = graphql.defaults({
     headers: { authorization: `token ${process.env.GITHUB_TOKEN}` },
 });
 
-// --- Prefix map for classification ---
 const PREFIX_MAP = {
     "task": "🚀 Tasks",
     "composite": "🚀 Tasks",
-    "ux/ui": "🔧 Enhancements",
-    "enhancement": "🔧 Enhancements",
     "bug": "🐞 Bug Fixes",
     "fix": "🐞 Bug Fixes",
-    "feat": "✨ New Features",
     "refactor": "🛠 Refactoring",
     "docs": "📚 Documentation",
     "test": "✅ Tests",
@@ -42,9 +36,11 @@ const PREFIX_MAP = {
     "proposal": "💡 Ideas & Proposals",
     "idea": "💡 Ideas & Proposals",
     "discussion": "💡 Ideas & Proposals",
+    "feat": "✨ New features & Enhancements",
+    "enhancement": "✨ New features & Enhancements",
+    "ux/ui": "✨ New features & Enhancements",
 };
 
-// --- Strip leading emojis ---
 function stripLeadingEmoji(title) {
     let t = title.trim();
     t = t.replace(/^(:[a-zA-Z0-9_+-]+:)+\s*/g, ''); // :emoji:
@@ -52,7 +48,6 @@ function stripLeadingEmoji(title) {
     return t.trim();
 }
 
-// --- Classify title by first prefix ---
 function classifyTitle(title) {
     const t = stripLeadingEmoji(title);
 
@@ -71,14 +66,11 @@ function classifyTitle(title) {
     return "Other";
 }
 
-// --- Normalize title for release notes ---
 function normalizeTitleForNotes(title) {
     let t = title.trim();
 
-    // Remove leading emoji or :emoji:
     t = t.replace(/^([\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+|(:[a-zA-Z0-9_+-]+:)+)\s*/u, '');
 
-    // Bracket prefix [Feat, Enhancement] → [Feat]
     const bracketMatch = t.match(/^\[([^\]]+)\]/);
     if (bracketMatch) {
         const firstPrefix = bracketMatch[1].split(',')[0].trim();
@@ -86,7 +78,6 @@ function normalizeTitleForNotes(title) {
         return t;
     }
 
-    // Single-word prefix like chore:, feat:, fix:, etc.
     const simpleMatch = t.match(/^(bug|fix|feat|enhancement|refactor|docs|test|chore|task|composite|ux\/ui)[:\s-]+/i);
     if (simpleMatch) {
         const prefix = simpleMatch[1].toLowerCase();
@@ -97,7 +88,6 @@ function normalizeTitleForNotes(title) {
     return t;
 }
 
-// --- Fetch all closed PRs ---
 async function getAllPRs({ owner, repo, base }) {
     const perPage = 100;
     let page = 1;
@@ -119,7 +109,6 @@ async function getAllPRs({ owner, repo, base }) {
     return all;
 }
 
-// --- Get linked issues via GraphQL ---
 async function getLinkedIssues(prNumber) {
     const query = `
     query ($owner: String!, $repo: String!, $number: Int!) {
@@ -133,8 +122,7 @@ async function getLinkedIssues(prNumber) {
           }
         }
       }
-    }
-  `;
+    }`;
     try {
         const response = await graphqlWithAuth(query, { owner: OWNER, repo: REPO, number: prNumber });
         return response.repository.pullRequest.closingIssuesReferences.nodes.map(i => ({
@@ -146,7 +134,6 @@ async function getLinkedIssues(prNumber) {
     }
 }
 
-// --- Semantic versioning ---
 function nextVersion(lastTag) {
     if (!lastTag) return "v0.1.0";
     const match = lastTag.match(/^v(\d+)\.(\d+)\.(\d+)/);
@@ -156,7 +143,6 @@ function nextVersion(lastTag) {
     return `v${major}.${minor}.${patch}`;
 }
 
-// --- Main ---
 async function main() {
     let lastRelease = null;
     try {
@@ -203,10 +189,9 @@ async function main() {
     }
 
     const sections = {
-        "🚀 Tasks": [],
-        "🔧 Enhancements": [],
+        "✨ New features & Enhancements": [],
         "🐞 Bug Fixes": [],
-        "✨ New Features": [],
+        "🚀 Tasks": [],
         "🛠 Refactoring": [],
         "📚 Documentation": [],
         "✅ Tests": [],
@@ -215,7 +200,6 @@ async function main() {
         Other: [],
     };
 
-    // Issues
     for (const [num, info] of Object.entries(issueMap)) {
         const title = normalizeTitleForNotes(info.title);
         const section = classifyTitle(title);
@@ -226,7 +210,6 @@ async function main() {
         sections[section].push(`#${num} ${title}\n↳ PRs: ${prsText}`);
     }
 
-    // PRs without issues
     for (const pr of prsWithoutIssue) {
         const title = normalizeTitleForNotes(pr.title);
         const section = classifyTitle(title);
@@ -234,7 +217,22 @@ async function main() {
     }
 
     let releaseNotesText = `## Draft Release Notes\n\n`;
-    for (const [sectionName, items] of Object.entries(sections)) {
+
+    // New features & Enhancements — first
+    const orderedSections = [
+        "✨ New features & Enhancements",
+        "🐞 Bug Fixes",
+        "🚀 Tasks",
+        "🛠 Refactoring",
+        "📚 Documentation",
+        "✅ Tests",
+        "⚙️ Chores",
+        "💡 Ideas & Proposals",
+        "Other",
+    ];
+
+    for (const sectionName of orderedSections) {
+        const items = sections[sectionName];
         if (!items.length) continue;
         items.sort((a, b) => parseInt(a.match(/#(\d+)/)[1]) - parseInt(b.match(/#(\d+)/)[1]));
         releaseNotesText += `### ${sectionName}\n`;
@@ -267,7 +265,6 @@ async function main() {
             name: `Release ${newTag}`,
             body: releaseNotesText,
             draft: true,
-            prerelease: false,
         });
         console.log(`✅ Draft release created: ${newTag}`);
     }
@@ -275,7 +272,6 @@ async function main() {
     console.log(`✅ Release processing completed`);
 }
 
-// Run
 main().catch(err => {
     console.error("Error:", err);
     process.exit(1);
