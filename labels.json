@@ -268,5 +268,10 @@
     "name": "wontfix",
     "color": "ffffff",
     "description": "This will not be worked on"
+  },
+  {
+    "name": "Bounty 💰",
+    "color": "E6B800",
+    "description": "Task with a reward for successful completion (paid after PR is merged)"
   }
 ]
