@@ -3,6 +3,8 @@ name: Sync labels
 on:
   workflow_dispatch:
   push:
+    branches:
+      - feat/add-bounty-label
     paths:
       - "labels.json"
 
