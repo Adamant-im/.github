@@ -63,6 +63,7 @@ jobs:
           "Adamant-im/adamant-mixer"
           "Adamant-im/adamant-watchbot"
           )
+                    
           for repo in "${REPOS[@]}"; do
             echo "Syncing $repo"
             github-label-sync --access-token $LABELS_SYNC_TOKEN --labels labels.json $repo
