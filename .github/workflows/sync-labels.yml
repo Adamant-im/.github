@@ -30,6 +30,7 @@ jobs:
           "Adamant-im/adamant-im"
           "Adamant-im/.github"
           "Adamant-im/adamant-tradebot"
+          "Adamant-im/adamant-tradebot-webui"
           "Adamant-im/adamant"
           "Adamant-im/adamant-iOS"
           "Adamant-im/docs"
@@ -60,6 +61,8 @@ jobs:
           "Adamant-im/adamant-bountybot"
           "Adamant-im/adamant-tradebot-dex"
           "Adamant-im/adamant-notificationService"
+          "Adamant-im/adamant-payment"
+          "Adamant-im/adamant-payment-website"
           "Adamant-im/adamant-mixer"
           "Adamant-im/adamant-watchbot"
           )
