@@ -63,6 +63,7 @@ jobs:
           "Adamant-im/adamant-notificationService"
           "Adamant-im/adamant-payment"
           "Adamant-im/adamant-payment-website"
+          "Adamant-im/adamant.business-website"
           "Adamant-im/adamant-mixer"
           "Adamant-im/adamant-watchbot"
           )
