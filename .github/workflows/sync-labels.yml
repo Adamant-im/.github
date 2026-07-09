@@ -54,7 +54,6 @@ jobs:
           "Adamant-im/json-sql"
           "Adamant-im/adamant-module-logger"
           "Adamant-im/adamant-botfactory"
-          "Adamant-im/adamant-trader"
           "Adamant-im/adamant-2fa"
           "Adamant-im/adamant-bet"
           "Adamant-im/adamant-bountybot"
