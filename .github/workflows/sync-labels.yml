@@ -40,7 +40,6 @@ jobs:
           "Adamant-im/adamant-api-jsclient"
           "Adamant-im/ipfs-node"
           "Adamant-im/AIPs"
-          "Adamant-im/adamant-next"
           "Adamant-im/developers"
           "Adamant-im/CryptoSwift"
           "Adamant-im/adamant-ns"
