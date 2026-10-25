@@ -64,6 +64,7 @@ jobs:
           "Adamant-im/adamant.business-website"
           "Adamant-im/adamant-mixer"
           "Adamant-im/adamant-watchbot"
+          "Adamant-im/adamant-infra-security"
           )
                     
           for repo in "${REPOS[@]}"; do
